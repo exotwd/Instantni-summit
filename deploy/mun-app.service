@@ -1,0 +1,19 @@
+[Unit]
+Description=MUN Chair System
+After=network.target
+
+[Service]
+User=munapp
+Group=munapp
+WorkingDirectory=/opt/mun-app
+EnvironmentFile=/opt/mun-app/.env
+ExecStart=/opt/mun-app/mun-app
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/opt/mun-app/data /opt/mun-app/backups
+
+[Install]
+WantedBy=multi-user.target
