@@ -1,0 +1,3 @@
+export const revisions = { voting:0, speaker:0, resolution:0, layout:0, break:0, debate:0 };
+const map = {"voting.updated":"voting","voting.closed":"voting","voting.reopened":"voting","voting.saved":"voting","voting.cancelled":"voting","speaker.updated":"speaker","resolution.updated":"resolution","layout.updated":"layout","break.started":"break","break.ended":"break","debate.updated":"debate","reset.performed":"voting"};
+export function acceptEvent(event){ const key = map[event.type]; if(!key) return true; if(event.revision <= (revisions[key] || 0)) return false; revisions[key] = event.revision; return true; }

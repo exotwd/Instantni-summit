@@ -7,4 +7,7 @@ for (const app of apps) {
     await access(`web/${app}/${file}`);
   }
 }
+for (const file of ["main.js", "api.js", "state.js"]) {
+  await access(`web/screen/${file}`);
+}
 console.log("Frontend static files verified.");
