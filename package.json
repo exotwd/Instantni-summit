@@ -3,8 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "node scripts/build-frontend.mjs",
-    "test": "node scripts/build-frontend.mjs"
+    "build": "bun scripts/build-frontend.mjs",
+    "test": "bun scripts/build-frontend.mjs"
   },
   "devDependencies": {}
 }

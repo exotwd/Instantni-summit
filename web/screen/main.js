@@ -4,28 +4,74 @@ import { acceptEvent } from "./state.js";
 const app = document.querySelector("#app");
 let state = null;
 let connected = false;
-setInterval(() => render(), 1000);
+let closeEvents = null;
+
 init();
+window.setInterval(() => {
+  if (state) render();
+}, 1000);
 
 async function init() {
   try {
     const me = await api("/api/auth/me");
-    if (me.role !== "screen") throw new Error("login");
+    if (me.role !== "screen") throw new Error("screen_login_required");
     await load();
-    events(async (event) => { if (acceptEvent(event)) await load(false); }, (s) => { connected = s === "connected"; render(); });
-  } catch { renderLogin(); }
+    connectRealtime();
+  } catch {
+    renderLogin();
+  }
+}
+
+function connectRealtime() {
+  if (closeEvents) closeEvents();
+  closeEvents = events(async (event) => {
+    if (acceptEvent(event)) await load(false);
+  }, (status) => {
+    connected = status === "connected";
+    if (state) render();
+  });
 }
 
 async function load(showLogin = true) {
-  try { state = await api("/api/screen/state"); render(); }
-  catch { if (showLogin) renderLogin(); }
+  try {
+    state = await api("/api/screen/state");
+    normalizeState();
+    render();
+  } catch (err) {
+    if (showLogin) renderLogin(err.message);
+    throw err;
+  }
 }
 
-function renderLogin() {
-  app.innerHTML = `<main class="login"><form id="login"><h1>Projekce</h1><input name="pin" type="password" inputmode="numeric" placeholder="Screen PIN" autofocus><button>Přihlásit</button><p id="login-error" class="error" role="alert"></p></form></main>`;
-  app.querySelector("#login").onsubmit = async (e) => {
-    e.preventDefault();
-    const form = e.target;
+function normalizeState() {
+  state.settings = state.settings || { values: {} };
+  state.settings.values = state.settings.values || {};
+  state.delegations = state.delegations || [];
+  state.resolution = state.resolution || { points: [], html: "" };
+  state.resolution.points = state.resolution.points || [];
+  state.voting = state.voting || { votes: [], counts: {} };
+  state.voting.votes = state.voting.votes || [];
+  state.voting.counts = state.voting.counts || {};
+  state.speakers = state.speakers || { queue: [], reactions: [], state: {} };
+  state.speakers.queue = state.speakers.queue || [];
+  state.speakers.reactions = state.speakers.reactions || [];
+  state.speakers.state = state.speakers.state || {};
+}
+
+function renderLogin(message = "") {
+  app.innerHTML = `
+    <main class="login">
+      <form id="login">
+        <h1>Projekce</h1>
+        <p>Přihlášení prezentační obrazovky.</p>
+        <input name="pin" type="password" inputmode="numeric" placeholder="Screen PIN" autocomplete="current-password" autofocus>
+        <button>Přihlásit</button>
+        <p id="login-error" class="error" role="alert">${esc(message)}</p>
+      </form>
+    </main>`;
+  app.querySelector("#login").onsubmit = async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
     const button = form.querySelector("button");
     const error = form.querySelector("#login-error");
     error.textContent = "";
@@ -34,7 +80,7 @@ function renderLogin() {
     try {
       await api("/api/auth/screen/login", { method: "POST", body: { pin: form.pin.value } });
       await load();
-      events(async (event) => { if (acceptEvent(event)) await load(false); }, (s) => { connected = s === "connected"; render(); });
+      connectRealtime();
     } catch (err) {
       error.textContent = err.message || "Přihlášení selhalo.";
       button.disabled = false;
@@ -45,22 +91,201 @@ function renderLogin() {
 
 function render() {
   if (!state) return;
-  const voting = state.voting.session;
-  const activeBreak = state.break;
-  app.innerHTML = `<main class="screen">
-    <section class="left"><div class="clock">${new Date().toLocaleTimeString("cs-CZ",{hour:"2-digit",minute:"2-digit"})}</div><div class="${connected ? "online" : "offline"}">${connected ? "online" : "offline"}</div><div class="seatmap">${state.delegations.map(d => `<div class="seat ${d.present ? "present" : ""}" style="left:${d.seat?.x || 0}%;top:${d.seat?.y || 0}%;width:${d.seat?.w || 10}%;height:${d.seat?.h || 10}%;">${d.flag}</div>`).join("")}</div></section>
-    <section class="center"><h1>${esc(state.settings.values.committee_name || "Jednání")}</h1><div class="resolution">${state.resolution.html || "<p>Rezoluce zatím nemá body.</p>"}</div></section>
-    <section class="right"><h2>Řečník</h2><div class="speaker">${state.speakers.currentSpeaker ? flagName(state.speakers.currentSpeaker) : "Nikdo"}</div><h3>Reakce</h3>${state.speakers.reactions.map(r => `<div class="queue ${r.status}">${flagName(r.delegation)}</div>`).join("")}<h3>Pořadník</h3>${state.speakers.queue.map(q => `<div class="queue">${flagName(q.delegation)}</div>`).join("")}</section>
-    ${voting ? `<div class="overlay"><div><h2>${voting.status === "open" ? "Probíhá hlasování" : voting.status === "closed" ? "Hlasování ukončeno" : "Výsledek hlasování"}</h2>${state.voting.amendment ? `<p>PN ${state.voting.amendment.number}: ${esc(state.voting.amendment.text)}</p>` : ""}<div class="timer">${voting.status === "open" ? voting.secondsLeft + " s" : ""}</div><div class="results"><span>PRO ${state.voting.counts.for}</span><span>PROTI ${state.voting.counts.against}</span><span>ZDRŽEL ${state.voting.counts.abstain}</span></div></div></div>` : ""}
-    ${activeBreak ? `<div class="overlay break"><div><h2>${esc(activeBreak.title)}</h2><div class="timer">${breakLeft(activeBreak)}</div></div></div>` : ""}
-  </main>`;
+  app.innerHTML = `
+    <div class="screen">
+      <div class="panel left">
+        <div class="clock">${new Date().toLocaleTimeString("cs-CZ", { hour: "2-digit", minute: "2-digit" })}</div>
+        <div class="connection ${connected ? "online" : "offline"}">${connected ? "online" : "offline"}</div>
+        <div class="section-title">Rozložení států</div>
+        <div id="miniStage" class="mini-stage">${renderSeatMap("attendance", false)}</div>
+      </div>
+      <div class="panel center">
+        <div class="resolution-title">${esc(state.settings.values.committee_name || "Aktuální znění rezoluce")}</div>
+        <div id="resolution" class="resolution">${state.resolution.html || renderResolutionPoints()}</div>
+      </div>
+      <div class="panel right">
+        <div class="section-title">Aktuální řečník</div>
+        ${renderCurrentSpeaker()}
+        <div class="section-title">Reakce</div>
+        <div class="reaction-area">${renderReactions()}</div>
+        <div class="queue-title">Pořadník řečníků</div>
+        <ol class="speaker-queue">${renderSpeakerQueue()}</ol>
+      </div>
+    </div>
+    ${renderVotingOverlay()}
+    ${renderBreakOverlay()}
+    <button class="admin-button" data-open-admin>Řízení schůze</button>`;
+  const adminButton = app.querySelector("[data-open-admin]");
+  if (adminButton) adminButton.onclick = () => window.open("/admin", "_blank");
 }
 
-function breakLeft(item) {
-  if (!item.endsAt) return "";
-  const left = Math.max(0, Math.floor((new Date(item.endsAt) - new Date()) / 1000));
-  return `${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`;
+function renderCurrentSpeaker() {
+  const current = state.speakers.currentSpeaker;
+  if (!current) {
+    return `
+      <div class="speaker-current no-speaker">
+        <div class="speaker-current-flag">–</div>
+        <div class="speaker-current-name">Žádný řečník</div>
+        <div class="speaker-time">00:00</div>
+      </div>`;
+  }
+  return `
+    <div class="speaker-current">
+      <div class="speaker-current-flag">${esc(current.flag || "")}</div>
+      <div class="speaker-current-name">${esc(current.name || "")}</div>
+      <div class="speaker-time">${formatRunningTime(state.speakers.state.currentStartedAt)}</div>
+    </div>`;
 }
 
-function flagName(d) { return `${d.flag} ${esc(d.name)}`; }
-function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function renderReactions() {
+  const rows = [];
+  const activeRecord = state.speakers.reactions.find((reaction) => reaction.status === "active");
+  if (activeRecord) {
+    rows.push({ delegation: activeRecord.delegation, status: "active", startedAt: activeRecord.startedAt });
+  } else if (state.speakers.activeReaction) {
+    rows.push({ delegation: state.speakers.activeReaction, status: "active" });
+  }
+  state.speakers.reactions
+    .filter((reaction) => reaction.status !== "active")
+    .forEach((reaction) => rows.push({ delegation: reaction.delegation, status: reaction.status, startedAt: reaction.startedAt }));
+  return [0, 1].map((index) => {
+    const row = rows[index];
+    if (!row) return `<div class="reaction-box empty"><div class="reaction-waiting">Volná reakce</div></div>`;
+    const active = row.status === "active";
+    return `
+      <div class="reaction-box ${active ? "active" : "waiting"}">
+        <div class="reaction-line">
+          <span class="reaction-flag">${esc(row.delegation.flag || "")}</span>
+          <span class="reaction-code">${esc(row.delegation.code || "")}</span>
+          ${active ? `<span class="reaction-time">${formatRunningTime(row.startedAt)}</span>` : ""}
+        </div>
+        <div class="reaction-waiting">${active ? "probíhá reakce" : "čeká na reakci"}</div>
+      </div>`;
+  }).join("");
+}
+
+function renderSpeakerQueue() {
+  if (!state.speakers.queue.length) return `<li>Pořadník je prázdný.</li>`;
+  return state.speakers.queue.map((item) => `<li>${esc(item.delegation.flag || "")} ${esc(item.delegation.code || "")} ${esc(item.delegation.name || "")}</li>`).join("");
+}
+
+function renderVotingOverlay() {
+  const voting = state.voting || {};
+  const session = voting.session;
+  if (!session) return "";
+  const amendment = voting.amendment;
+  const counts = voting.counts || {};
+  const isResult = session.status === "saved" || session.status === "closed";
+  return `
+    <div id="voteOverlay" class="overlay visible">
+      <div class="overlay-header">
+        <div>
+          <div class="overlay-title">${isResult ? "Výsledek hlasování" : "Hlasování"}${amendment ? ` o PN ${esc(amendment.number || "")}` : ""}</div>
+          <div class="overlay-subtitle">${amendment ? esc(shorten(amendment.text || "", 220)) : "Procedurální hlasování"}</div>
+        </div>
+        <div class="overlay-counts">
+          ${session.status === "open" ? `<strong>ZBÝVÁ: ${formatSeconds(remainingSeconds(session))}</strong><br>` : `<strong>HLASOVÁNÍ UKONČENO</strong><br>`}
+          PRO: ${counts.for || 0}<br>
+          PROTI: ${counts.against || 0}<br>
+          ZDRŽUJE SE: ${counts.abstain || 0}
+        </div>
+      </div>
+      <div class="overlay-stage">${renderSeatMap("vote", true)}</div>
+    </div>`;
+}
+
+function renderBreakOverlay() {
+  const item = state.break;
+  if (!item || !item.endsAt) return "";
+  const left = breakSecondsLeft(item);
+  if (left <= 0) return "";
+  const coffee = item.type === "coffee_break";
+  return `
+    <div id="breakOverlay" class="break-overlay visible">
+      <div class="break-box">
+        <div class="break-kind ${coffee ? "coffee" : "caucus"}">${esc(item.title || (coffee ? "Přestávka na kávu" : "Kuloární jednání"))}</div>
+        <div class="break-countdown">${formatSeconds(left)}</div>
+        <div class="break-note">${coffee ? "Přestávka na kávu" : "Čas na kuloární jednání"}</div>
+      </div>
+    </div>`;
+}
+
+function renderSeatMap(mode, large) {
+  const votes = new Map((state.voting.votes || []).map((vote) => [vote.delegationId, vote.choice]));
+  return state.delegations.map((delegation, index) => {
+    const seat = projectionSeat(delegation.seat || defaultSeat(index), large);
+    const classes = ["seat"];
+    if (mode === "vote") {
+      const vote = votes.get(delegation.id);
+      if (vote) classes.push(`vote-${vote}`);
+      else if (!delegation.present) classes.push("vote-absent");
+    } else {
+      classes.push(delegation.present ? "present" : "absent");
+    }
+    return `<div class="${classes.join(" ")}" style="left:${seat.x}%;top:${seat.y}%;width:${seat.w}%;height:${seat.h}%;" title="${esc(delegation.name)}"><div class="seat-flag-map">${esc(delegation.flag || delegation.code || "")}</div></div>`;
+  }).join("");
+}
+
+function projectionSeat(seat, large) {
+  const baseW = Number(seat.w || 10);
+  const baseH = Number(seat.h || 10);
+  const w = Math.min(baseW * (large ? 1.42 : 1.26), large ? 20 : 17);
+  const h = Math.min(baseH * (large ? 1.12 : 1.04), large ? 13 : 10.8);
+  const x = clamp(Number(seat.x || 0) - (w - baseW) / 2, 0, 100 - w);
+  const y = clamp(100 - Number(seat.y || 0) - baseH - (h - baseH) / 2, 0, 100 - h);
+  return { x, y, w, h };
+}
+
+function renderResolutionPoints() {
+  if (!state.resolution.points?.length) return "<p>Rezoluce zatím nemá body.</p>";
+  return `<ol>${state.resolution.points.map((point) => `<li>${esc(point.text)}</li>`).join("")}</ol>`;
+}
+
+function defaultSeat(index) {
+  const columns = 5;
+  return { x: 5 + (index % columns) * 18, y: 7 + Math.floor(index / columns) * 14, w: 15, h: 9, rotation: 0 };
+}
+
+function remainingSeconds(session) {
+  if (!session || session.status !== "open") return 0;
+  if (session.startedAt && session.timeLimitSec) {
+    const elapsed = Math.floor((Date.now() - new Date(session.startedAt).getTime()) / 1000);
+    return Math.max(0, Number(session.timeLimitSec) - elapsed);
+  }
+  return Math.max(0, Number(session.secondsLeft || 0));
+}
+
+function breakSecondsLeft(item) {
+  return Math.max(0, Math.ceil((new Date(item.endsAt).getTime() - Date.now()) / 1000));
+}
+
+function formatRunningTime(startTime) {
+  if (!startTime) return "00:00";
+  return formatSeconds(Math.max(0, Math.floor((Date.now() - new Date(startTime).getTime()) / 1000)));
+}
+
+function formatSeconds(total) {
+  total = Math.max(0, Number(total || 0));
+  const minutes = Math.floor(total / 60);
+  const seconds = total % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+function shorten(text, max) {
+  text = String(text || "");
+  return text.length <= max ? text : `${text.slice(0, max - 1)}…`;
+}
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function esc(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;"
+  })[char]);
+}
