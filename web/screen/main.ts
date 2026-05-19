@@ -33,8 +33,6 @@ function renderLogin() {
     button.textContent = "Přihlašuji...";
     try {
       await api("/api/auth/screen/login", { method: "POST", body: { pin: form.pin.value } });
-      const me = await api("/api/auth/me");
-      if (me.role !== "screen") throw new Error("Přihlášení proběhlo, ale prohlížeč neuložil session cookie. Pokud testujete přes HTTP, nastavte COOKIE_SECURE=false, nebo používejte HTTPS doménu.");
       await load();
       events(async (event) => { if (acceptEvent(event)) await load(false); }, (s) => { connected = s === "connected"; render(); });
     }

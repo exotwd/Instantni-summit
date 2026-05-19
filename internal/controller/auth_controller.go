@@ -21,6 +21,7 @@ func (api *API) AdminLogin(w http.ResponseWriter, r *http.Request) {
 		writeServiceError(w, err)
 		return
 	}
+	clearCookie(w, screenCookie)
 	setCookie(w, adminCookie, token, expires, api.cfg.CookieSecure)
 	writeJSON(w, http.StatusOK, map[string]any{"role": domain.RoleAdmin, "expiresAt": expires})
 }
@@ -36,6 +37,7 @@ func (api *API) ScreenLogin(w http.ResponseWriter, r *http.Request) {
 		writeServiceError(w, err)
 		return
 	}
+	clearCookie(w, adminCookie)
 	setCookie(w, screenCookie, token, expires, api.cfg.CookieSecure)
 	writeJSON(w, http.StatusOK, map[string]any{"role": domain.RoleScreen, "expiresAt": expires})
 }
