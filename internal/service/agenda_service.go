@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"database/sql"
+	"strings"
+	"time"
 
 	"mun-app/internal/database"
 	"mun-app/internal/domain"
@@ -24,6 +26,7 @@ func (s *AgendaService) ListAgenda(ctx context.Context) ([]domain.AgendaItem, er
 }
 
 func (s *AgendaService) CreateAgendaItem(ctx context.Context, item domain.AgendaItem) (*domain.AgendaItem, error) {
+	item = normalizeAgendaItem(item)
 	if err := validateAgenda(item); err != nil {
 		return nil, err
 	}
@@ -52,6 +55,7 @@ func (s *AgendaService) CreateAgendaItem(ctx context.Context, item domain.Agenda
 }
 
 func (s *AgendaService) UpdateAgendaItem(ctx context.Context, item domain.AgendaItem) error {
+	item = normalizeAgendaItem(item)
 	if err := validateAgenda(item); err != nil {
 		return err
 	}
@@ -94,8 +98,14 @@ func (s *AgendaService) mutate(ctx context.Context, fn func(*sql.Tx) error) erro
 }
 
 func validateAgenda(item domain.AgendaItem) error {
-	if item.Title == "" {
+	if strings.TrimSpace(item.Title) == "" {
 		return NewUserError("missing_title", "Název bodu programu je povinný.")
+	}
+	if item.DurationMinutes != nil && *item.DurationMinutes <= 0 {
+		return NewUserError("invalid_duration", "DĂ©lka bodu programu musĂ­ bĂ˝t kladnĂˇ.")
+	}
+	if item.StartsAt != nil && item.EndsAt != nil && !item.EndsAt.After(*item.StartsAt) {
+		return NewUserError("invalid_agenda_time", "Konec bodu programu musĂ­ bĂ˝t po zaÄŤĂˇtku.")
 	}
 	switch item.Type {
 	case domain.AgendaSession, domain.AgendaBreak, domain.AgendaCaucus, domain.AgendaVoting, domain.AgendaOrganizational, domain.AgendaOther:
@@ -103,4 +113,24 @@ func validateAgenda(item domain.AgendaItem) error {
 	default:
 		return NewUserError("invalid_agenda_type", "Neplatný typ bodu programu.")
 	}
+}
+
+func normalizeAgendaItem(item domain.AgendaItem) domain.AgendaItem {
+	item.Title = strings.TrimSpace(item.Title)
+	item.Type = strings.TrimSpace(item.Type)
+	item.Note = strings.TrimSpace(item.Note)
+	if item.DurationMinutes != nil && *item.DurationMinutes <= 0 {
+		item.DurationMinutes = nil
+	}
+	if item.StartsAt != nil && item.EndsAt == nil && item.DurationMinutes != nil {
+		endsAt := item.StartsAt.Add(time.Duration(*item.DurationMinutes) * time.Minute)
+		item.EndsAt = &endsAt
+	}
+	if item.StartsAt != nil && item.EndsAt != nil && item.DurationMinutes == nil {
+		minutes := int(item.EndsAt.Sub(*item.StartsAt).Minutes())
+		if minutes > 0 {
+			item.DurationMinutes = &minutes
+		}
+	}
+	return item
 }

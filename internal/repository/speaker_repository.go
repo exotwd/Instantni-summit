@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"time"
 
 	"mun-app/internal/database"
 	"mun-app/internal/domain"
@@ -31,6 +32,29 @@ func (r *SpeakerRepository) State(ctx context.Context) (domain.SpeakerState, err
 func (r *SpeakerRepository) SetState(ctx context.Context, currentID, activeReactionID *int64, revision int64) error {
 	_, err := r.db.ExecContext(ctx, `update speaker_state set current_delegation_id=?, active_reaction_delegation_id=?, current_started_at=case when ? is null then null else coalesce(current_started_at, current_timestamp) end, revision=?, updated_at=current_timestamp where id=1`,
 		currentID, activeReactionID, currentID, revision)
+	return err
+}
+
+func (r *SpeakerRepository) SetCurrent(ctx context.Context, currentID *int64) error {
+	_, err := r.db.ExecContext(ctx, `update speaker_state set current_delegation_id=?, active_reaction_delegation_id=null, current_started_at=case when ? is null then null else current_timestamp end, current_paused_ms=0, updated_at=current_timestamp where id=1`, currentID, currentID)
+	return err
+}
+
+func (r *SpeakerRepository) SetActiveReaction(ctx context.Context, activeReactionID *int64) error {
+	_, err := r.db.ExecContext(ctx, `update speaker_state set active_reaction_delegation_id=?, updated_at=current_timestamp where id=1`, activeReactionID)
+	return err
+}
+
+func (r *SpeakerRepository) PauseCurrent(ctx context.Context, pausedMS int64) error {
+	if pausedMS < 0 {
+		pausedMS = 0
+	}
+	_, err := r.db.ExecContext(ctx, `update speaker_state set current_paused_ms=?, updated_at=current_timestamp where id=1`, pausedMS)
+	return err
+}
+
+func (r *SpeakerRepository) ResumeCurrent(ctx context.Context, startedAt time.Time) error {
+	_, err := r.db.ExecContext(ctx, `update speaker_state set active_reaction_delegation_id=null, current_started_at=?, current_paused_ms=0, updated_at=current_timestamp where id=1`, startedAt.UTC())
 	return err
 }
 
@@ -96,7 +120,6 @@ func (r *SpeakerRepository) Reactions(ctx context.Context) ([]domain.SpeakerReac
 		from speaker_reactions rr join delegations d on d.id=rr.delegation_id
 		left join seat_layout s on s.delegation_id=d.id
 		left join participants p on p.delegation_id=d.id
-		where rr.status != 'finished'
 		order by rr.position, rr.id`)
 	if err != nil {
 		return nil, err
@@ -120,7 +143,7 @@ func (r *SpeakerRepository) Reactions(ctx context.Context) ([]domain.SpeakerReac
 
 func (r *SpeakerRepository) AddReaction(ctx context.Context, delegationID int64) error {
 	var pos int
-	if err := r.db.QueryRowContext(ctx, `select coalesce(max(position),0)+1 from speaker_reactions where status != 'finished'`).Scan(&pos); err != nil {
+	if err := r.db.QueryRowContext(ctx, `select coalesce(max(position),0)+1 from speaker_reactions`).Scan(&pos); err != nil {
 		return err
 	}
 	_, err := r.db.ExecContext(ctx, `insert into speaker_reactions(delegation_id, position, status) values(?,?,?)`, delegationID, pos, domain.ReactionWaiting)
@@ -129,7 +152,7 @@ func (r *SpeakerRepository) AddReaction(ctx context.Context, delegationID int64)
 
 func (r *SpeakerRepository) StartReaction(ctx context.Context, id int64) (*int64, error) {
 	var delegationID int64
-	if err := r.db.QueryRowContext(ctx, `select delegation_id from speaker_reactions where id=?`, id).Scan(&delegationID); err != nil {
+	if err := r.db.QueryRowContext(ctx, `select delegation_id from speaker_reactions where id=? and status='waiting'`, id).Scan(&delegationID); err != nil {
 		return nil, err
 	}
 	_, err := r.db.ExecContext(ctx, `update speaker_reactions set status='active', started_at=current_timestamp where id=?`, id)

@@ -255,6 +255,13 @@ body {
   background: rgba(88, 28, 135, .25);
 }
 
+.reaction-box.finished {
+  border-color: rgba(148, 163, 184, .42);
+  border-left-color: rgba(148, 163, 184, .72);
+  background: rgba(51, 65, 85, .38);
+  opacity: .66;
+}
+
 .reaction-box.empty {
   opacity: .55;
 }

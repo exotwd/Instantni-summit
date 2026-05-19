@@ -135,7 +135,9 @@ label {
   font-weight: 900;
 }
 
-input {
+input,
+select,
+textarea {
   width: 100%;
   padding: 16px;
   border: 2px solid var(--line);
@@ -146,9 +148,16 @@ input {
   outline: none;
 }
 
-input:focus {
+input:focus,
+select:focus,
+textarea:focus {
   border-color: var(--dark);
   box-shadow: 0 0 0 5px rgba(17, 24, 39, 0.08);
+}
+
+textarea {
+  min-height: 130px;
+  resize: vertical;
 }
 
 .code-input {
@@ -334,6 +343,11 @@ button:disabled {
 .vote-button.for { background: var(--green); }
 .vote-button.against { background: var(--red); }
 .vote-button.abstain { background: var(--yellow); color: #111827; }
+
+.amendment-card {
+  display: grid;
+  gap: 8px;
+}
 
 .status {
   min-height: 22px;

@@ -18,7 +18,7 @@ func NewAgendaRepository(db database.Executor) *AgendaRepository {
 }
 
 func (r *AgendaRepository) List(ctx context.Context) ([]domain.AgendaItem, error) {
-	rows, err := r.db.QueryContext(ctx, `select id,title,type,starts_at,ends_at,note,display_order,created_at,updated_at from agenda_items order by display_order, starts_at, id`)
+	rows, err := r.db.QueryContext(ctx, `select id,title,type,starts_at,ends_at,duration_minutes,note,display_order,created_at,updated_at from agenda_items order by display_order, starts_at, id`)
 	if err != nil {
 		return nil, err
 	}
@@ -35,7 +35,7 @@ func (r *AgendaRepository) List(ctx context.Context) ([]domain.AgendaItem, error
 }
 
 func (r *AgendaRepository) Get(ctx context.Context, id int64) (*domain.AgendaItem, error) {
-	item, err := scanAgendaItem(r.db.QueryRowContext(ctx, `select id,title,type,starts_at,ends_at,note,display_order,created_at,updated_at from agenda_items where id=?`, id))
+	item, err := scanAgendaItem(r.db.QueryRowContext(ctx, `select id,title,type,starts_at,ends_at,duration_minutes,note,display_order,created_at,updated_at from agenda_items where id=?`, id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -46,8 +46,8 @@ func (r *AgendaRepository) Create(ctx context.Context, item domain.AgendaItem) (
 	if item.DisplayOrder == 0 {
 		_ = r.db.QueryRowContext(ctx, `select coalesce(max(display_order),0)+1 from agenda_items`).Scan(&item.DisplayOrder)
 	}
-	res, err := r.db.ExecContext(ctx, `insert into agenda_items(title,type,starts_at,ends_at,note,display_order) values(?,?,?,?,?,?)`,
-		item.Title, item.Type, item.StartsAt, item.EndsAt, item.Note, item.DisplayOrder)
+	res, err := r.db.ExecContext(ctx, `insert into agenda_items(title,type,starts_at,ends_at,duration_minutes,note,display_order) values(?,?,?,?,?,?,?)`,
+		item.Title, item.Type, item.StartsAt, item.EndsAt, item.DurationMinutes, item.Note, item.DisplayOrder)
 	if err != nil {
 		return 0, err
 	}
@@ -55,8 +55,8 @@ func (r *AgendaRepository) Create(ctx context.Context, item domain.AgendaItem) (
 }
 
 func (r *AgendaRepository) Update(ctx context.Context, item domain.AgendaItem) error {
-	_, err := r.db.ExecContext(ctx, `update agenda_items set title=?, type=?, starts_at=?, ends_at=?, note=?, display_order=?, updated_at=current_timestamp where id=?`,
-		item.Title, item.Type, item.StartsAt, item.EndsAt, item.Note, item.DisplayOrder, item.ID)
+	_, err := r.db.ExecContext(ctx, `update agenda_items set title=?, type=?, starts_at=?, ends_at=?, duration_minutes=?, note=?, display_order=?, updated_at=current_timestamp where id=?`,
+		item.Title, item.Type, item.StartsAt, item.EndsAt, item.DurationMinutes, item.Note, item.DisplayOrder, item.ID)
 	return err
 }
 
@@ -77,10 +77,15 @@ func (r *AgendaRepository) Reorder(ctx context.Context, ids []int64) error {
 func scanAgendaItem(row interface{ Scan(dest ...any) error }) (domain.AgendaItem, error) {
 	var item domain.AgendaItem
 	var starts, ends sql.NullTime
+	var duration sql.NullInt64
 	var note sql.NullString
-	err := row.Scan(&item.ID, &item.Title, &item.Type, &starts, &ends, &note, &item.DisplayOrder, &item.CreatedAt, &item.UpdatedAt)
+	err := row.Scan(&item.ID, &item.Title, &item.Type, &starts, &ends, &duration, &note, &item.DisplayOrder, &item.CreatedAt, &item.UpdatedAt)
 	item.StartsAt = nullTimePtr(starts)
 	item.EndsAt = nullTimePtr(ends)
+	if duration.Valid {
+		value := int(duration.Int64)
+		item.DurationMinutes = &value
+	}
 	item.Note = nullString(note)
 	return item, err
 }

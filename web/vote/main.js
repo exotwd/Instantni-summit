@@ -153,6 +153,7 @@ function renderApp() {
           <div id="voteContent">${renderVotingContent(voting)}</div>
           <div id="voteStatus" class="status"></div>
         </div>
+        ${renderAmendmentForm()}
         <div class="foot-actions">
           <button class="secondary" data-refresh>Obnovit</button>
           <button class="secondary" data-logout>Změnit kód</button>
@@ -166,6 +167,8 @@ function renderApp() {
     showToast("Stav byl obnoven.");
   };
   app.querySelector("[data-logout]").onclick = logout;
+  const amendmentForm = app.querySelector("[data-form=amendment]");
+  if (amendmentForm) amendmentForm.onsubmit = submitAmendment;
 }
 
 function renderVotingContent(voting) {
@@ -196,6 +199,57 @@ function renderVotingContent(voting) {
           <button class="vote-button abstain" data-choice="abstain">ZDRŽUJI SE</button>
         </div>`
       : `<div class="empty-state"><p>Hlasování bylo ukončeno. Čeká se na potvrzení výsledku předsednictvem.</p></div>`}`;
+}
+
+function renderAmendmentForm() {
+  const points = state.resolution.points || [];
+  return `
+    <form class="card amendment-card" data-form="amendment">
+      <h2>Podat PN</h2>
+      <p>Pozměňovací návrh odešli předsednictvu. O zařazení rozhoduje chair.</p>
+      <label>Typ návrhu</label>
+      <select name="type">
+        <option value="add">Přidat bod</option>
+        <option value="update">Upravit bod</option>
+        <option value="remove">Odstranit bod</option>
+      </select>
+      <label>Cílový bod</label>
+      <select name="targetPointId">
+        <option value="">Bez cíle</option>
+        ${points.map((point) => `<option value="${point.id}">${point.number}. ${esc(shorten(point.text, 90))}</option>`).join("")}
+      </select>
+      <label>Garanti</label>
+      <input name="guarantorsText" placeholder="Garanti návrhu">
+      <label>Text PN</label>
+      <textarea name="text" placeholder="Text pozměňovacího návrhu"></textarea>
+      <button>Odeslat PN</button>
+      <div id="amendmentStatus" class="status"></div>
+    </form>`;
+}
+
+async function submitAmendment(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const status = form.querySelector("#amendmentStatus");
+  status.textContent = "Odesílám PN...";
+  status.className = "status";
+  try {
+    await api("/api/vote/amendments", {
+      method: "POST",
+      body: {
+        type: form.type.value,
+        targetPointId: form.targetPointId.value ? Number(form.targetPointId.value) : null,
+        guarantorsText: form.guarantorsText.value,
+        text: form.text.value
+      }
+    });
+    form.reset();
+    status.textContent = "PN byl odeslán předsednictvu.";
+    status.className = "status success";
+  } catch (err) {
+    status.textContent = err.message || "PN se nepodařilo odeslat.";
+    status.className = "status error";
+  }
 }
 
 async function cast(choice) {

@@ -8,6 +8,7 @@ type AgendaItem struct {
 	Type         string     `json:"type"`
 	StartsAt     *time.Time `json:"startsAt,omitempty"`
 	EndsAt       *time.Time `json:"endsAt,omitempty"`
+	DurationMinutes *int       `json:"durationMinutes,omitempty"`
 	Note         string     `json:"note"`
 	DisplayOrder int        `json:"displayOrder"`
 	CreatedAt    time.Time  `json:"createdAt"`

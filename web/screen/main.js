@@ -107,7 +107,7 @@ function render() {
         <div class="section-title">Aktuální řečník</div>
         ${renderCurrentSpeaker()}
         <div class="section-title">Reakce</div>
-        <div class="reaction-area">${renderReactions()}</div>
+        <div class="reaction-area">${renderReactionBoxes()}</div>
         <div class="queue-title">Pořadník řečníků</div>
         <ol class="speaker-queue">${renderSpeakerQueue()}</ol>
       </div>
@@ -133,7 +133,7 @@ function renderCurrentSpeaker() {
     <div class="speaker-current">
       <div class="speaker-current-flag">${esc(current.flag || "")}</div>
       <div class="speaker-current-name">${esc(current.name || "")}</div>
-      <div class="speaker-time">${formatRunningTime(state.speakers.state.currentStartedAt)}</div>
+      <div class="speaker-time">${currentSpeakerTime()}</div>
     </div>`;
 }
 
@@ -160,6 +160,27 @@ function renderReactions() {
           ${active ? `<span class="reaction-time">${formatRunningTime(row.startedAt)}</span>` : ""}
         </div>
         <div class="reaction-waiting">${active ? "probíhá reakce" : "čeká na reakci"}</div>
+      </div>`;
+  }).join("");
+}
+
+function renderReactionBoxes() {
+  const rows = state.speakers.reactions.length
+    ? state.speakers.reactions.map((reaction) => ({ delegation: reaction.delegation, status: reaction.status, startedAt: reaction.startedAt }))
+    : (state.speakers.activeReaction ? [{ delegation: state.speakers.activeReaction, status: "active" }] : []);
+  return [0, 1].map((index) => {
+    const row = rows[index];
+    if (!row) return `<div class="reaction-box empty"><div class="reaction-waiting">Volná reakce</div></div>`;
+    const active = row.status === "active";
+    const finished = row.status === "finished";
+    return `
+      <div class="reaction-box ${active ? "active" : finished ? "finished" : "waiting"}">
+        <div class="reaction-line">
+          <span class="reaction-flag">${esc(row.delegation.flag || "")}</span>
+          <span class="reaction-code">${esc(row.delegation.code || "")}</span>
+          ${active ? `<span class="reaction-time">${formatRunningTime(row.startedAt)}</span>` : ""}
+        </div>
+        <div class="reaction-waiting">${active ? "probíhá reakce" : finished ? "reakce dokončena" : "čeká na reakci"}</div>
       </div>`;
   }).join("");
 }
@@ -262,6 +283,14 @@ function breakSecondsLeft(item) {
 function formatRunningTime(startTime) {
   if (!startTime) return "00:00";
   return formatSeconds(Math.max(0, Math.floor((Date.now() - new Date(startTime).getTime()) / 1000)));
+}
+
+function currentSpeakerTime() {
+  const speakerState = state.speakers.state || {};
+  if (state.speakers.activeReaction && speakerState.currentPausedMs) {
+    return formatSeconds(Math.floor(Number(speakerState.currentPausedMs || 0) / 1000));
+  }
+  return formatRunningTime(speakerState.currentStartedAt);
 }
 
 function formatSeconds(total) {

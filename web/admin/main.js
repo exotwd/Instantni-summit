@@ -3,12 +3,16 @@ import { acceptEvent } from "./state.js";
 
 const app = document.querySelector("#app");
 let state = null;
-let panel = "amendments";
+let panel = "dashboard";
 let realtimeStatus = "odpojeno";
 let closeEvents = null;
 let speakerClickTimer = null;
+let editingDelegationId = null;
+let editingAgendaId = null;
+let draggingLayout = null;
 
 const panels = [
+  ["dashboard", "Přehled"],
   ["amendments", "Pozměňovací návrhy"],
   ["layout", "Rozložení a prezence"],
   ["voting", "Hlasování"],
@@ -17,6 +21,9 @@ const panels = [
 ];
 
 init();
+window.addEventListener("pointermove", onLayoutDragMove);
+window.addEventListener("pointerup", onLayoutDragEnd);
+window.addEventListener("pointercancel", onLayoutDragEnd);
 
 async function init() {
   try {
@@ -123,20 +130,58 @@ function render() {
       ${state.settings.defaultsWarning ? `<div class="warning">Výchozí PINy jsou stále aktivní. Změň je v nastavení.</div>` : ""}
       ${renderPanel()}
     </div>
+    ${renderDelegateEditor()}
     <div id="toast"></div>`;
   bindActions();
 }
 
 function renderPanel() {
+  if (panel === "dashboard") return renderDashboardPanel();
   if (panel === "layout") return renderLayoutPanel();
   if (panel === "voting") return renderVotingPanel();
-  if (panel === "agenda") return renderAgendaPanel();
+  if (panel === "agenda") return renderAgendaPanelV2();
   if (panel === "settings") return renderSettingsPanel();
   return renderAmendmentsPanel();
 }
 
+function renderDashboardPanel() {
+  const present = state.delegations.filter((item) => item.present).length;
+  const session = state.voting.session;
+  return `
+    <div class="dashboard-grid">
+      <div class="card">
+        <h2>Přehled jednání</h2>
+        <div class="meta">
+          <div><strong>Prezence</strong><br>${present}/${state.delegations.length} přítomno</div>
+          <div><strong>Aktuální řečník</strong><br>${state.speakers.currentSpeaker ? flagName(state.speakers.currentSpeaker) : "Nikdo nemluví"}</div>
+          <div><strong>Hlasování</strong><br>${session ? statusLabel(session.status) : "neprobíhá"}</div>
+        </div>
+      </div>
+      ${renderAgendaOverview()}
+    </div>
+    ${renderSpeakerPanel()}
+    ${renderBreakPanel()}
+    <div class="card">
+      <h2>Aktivní PN</h2>
+      <div id="items">${renderAmendmentItems()}</div>
+    </div>`;
+}
+
+function renderAgendaOverview() {
+  return `
+    <div class="card agenda-overview">
+      <h2>Agenda</h2>
+      ${state.agenda.length ? state.agenda.map((item) => `
+        <div class="agenda-row">
+          <div><strong>${esc(item.title)}</strong><br><span class="muted">${agendaTypeLabel(item.type)}${agendaTimeLabel(item) ? " · " + agendaTimeLabel(item) : ""}</span></div>
+          <button class="save" data-panel="agenda">Upravit</button>
+        </div>`).join("") : `<div class="empty">Agenda je zatím prázdná.</div>`}
+    </div>`;
+}
+
 function renderAmendmentsPanel() {
   return `
+    ${renderAgendaOverview()}
     ${renderSpeakerPanel()}
     ${renderBreakPanel()}
     <form class="card" data-form="amendment">
@@ -165,7 +210,7 @@ function renderSpeakerPanel() {
           <div class="label">Aktuální řečník</div>
           <div class="current-speaker">${current ? flagName(current) : "Žádný aktuální řečník"}</div>
           <div class="label">Reakce na aktuální projev</div>
-          <div class="reaction-slots">${renderReactions()}</div>
+          <div class="reaction-slots">${renderReactionSlots()}</div>
           <div class="actions">
             <button class="vote-button" data-action="next-speaker">Další řečník</button>
             <button class="save" data-action="clear-speakers">Vymazat pořadník</button>
@@ -193,6 +238,20 @@ function renderReactions() {
     const row = rows[index];
     if (!row) return `<div class="reaction-slot">Volná reakce</div>`;
     return `<div class="reaction-slot ${row.active ? "active" : ""}" data-remove-reaction="${row.item.id}">${row.active ? "Probíhá: " : ""}${flagName(row.item.delegation)}</div>`;
+  }).join("");
+}
+
+function renderReactionSlots() {
+  const rows = state.speakers.reactions.length
+    ? state.speakers.reactions
+    : (state.speakers.activeReaction ? [{ delegation: state.speakers.activeReaction, id: 0, status: "active" }] : []);
+  return [0, 1].map((index) => {
+    const item = rows[index];
+    if (!item) return `<div class="reaction-slot">Volná reakce</div>`;
+    const active = item.status === "active";
+    const finished = item.status === "finished";
+    const label = active ? "Probíhá: " : finished ? "Dokončeno: " : "";
+    return `<div class="reaction-slot ${active ? "active" : ""} ${finished ? "finished" : ""}" data-remove-reaction="${item.id}">${label}${flagName(item.delegation)}</div>`;
   }).join("");
 }
 
@@ -319,6 +378,42 @@ function renderAgendaPanel() {
     </div>`;
 }
 
+function renderAgendaPanelV2() {
+  const item = editingAgendaId ? state.agenda.find((row) => row.id === editingAgendaId) : null;
+  return `
+    <form class="card" data-form="agenda">
+      <h2>${item ? "Upravit bod agendy" : "Nový bod agendy"}</h2>
+      <div class="meta compact">
+        <div><strong>Název</strong><input name="title" value="${esc(item?.title || "")}" placeholder="Název bodu" required></div>
+        <div><strong>Typ</strong><select name="type">${agendaTypeOptions(item?.type || "session")}</select></div>
+        <div><strong>Začátek</strong><input name="startsAt" type="datetime-local" value="${dateTimeLocalValue(item?.startsAt)}"></div>
+        <div><strong>Konec</strong><input name="endsAt" type="datetime-local" value="${dateTimeLocalValue(item?.endsAt)}"></div>
+        <div><strong>Délka v minutách</strong><input name="durationMinutes" type="number" min="1" value="${esc(item?.durationMinutes || "")}" placeholder="např. 20"></div>
+        <div><strong>Pořadí</strong><input name="displayOrder" type="number" min="0" value="${esc(item?.displayOrder || "")}"></div>
+      </div>
+      <textarea name="note" placeholder="Poznámka">${esc(item?.note || "")}</textarea>
+      <div class="actions">
+        <button class="approve">${item ? "Uložit změny" : "Přidat bod"}</button>
+        ${item ? `<button type="button" class="save" data-cancel-agenda-edit>Zrušit úpravy</button>` : ""}
+      </div>
+    </form>
+    <div class="card">
+      <h2>Bodový program</h2>
+      ${state.agenda.length ? state.agenda.map((row) => `
+        <div class="item agenda-item">
+          <div>
+            <b>${esc(row.title)}</b><br>
+            <span class="muted">${agendaTypeLabel(row.type)}${agendaTimeLabel(row) ? " · " + agendaTimeLabel(row) : ""}</span>
+            ${row.note ? `<p>${esc(row.note)}</p>` : ""}
+          </div>
+          <div class="actions">
+            <button class="save" data-edit-agenda="${row.id}">Upravit</button>
+            <button class="reject" data-delete-agenda="${row.id}">Smazat</button>
+          </div>
+        </div>`).join("") : `<div class="empty">Agenda je prázdná.</div>`}
+    </div>`;
+}
+
 function renderSettingsPanel() {
   const values = state.settings.values || {};
   return `
@@ -372,6 +467,42 @@ function renderAttendanceTable() {
             </td>
           </tr>`).join("")}</tbody>
       </table>
+    </div>`;
+}
+
+function renderDelegateEditor() {
+  if (!editingDelegationId) return "";
+  const delegation = state.attendance.delegations.find((item) => item.id === editingDelegationId) || state.delegations.find((item) => item.id === editingDelegationId);
+  if (!delegation) return "";
+  const participant = delegation.participant || {};
+  return `
+    <div class="modal-backdrop" role="dialog" aria-modal="true">
+      <form class="modal-card delegate-editor" data-form="delegate-details">
+        <div class="modal-head">
+          <div>
+            <h2>${esc(delegation.flag || "")} ${esc(delegation.name || "")}</h2>
+            <p>Osobní údaje delegace, kódy a prezence.</p>
+          </div>
+          <button type="button" class="save icon-button" data-close-delegate-editor>×</button>
+        </div>
+        <div class="details-grid">
+          <label>Název delegace<input name="name" value="${esc(delegation.name || "")}"></label>
+          <label>Zkratka<input name="code" value="${esc(delegation.code || "")}"></label>
+          <label>Vlajka<input name="flag" value="${esc(delegation.flag || "")}"></label>
+          <label>4místný kód<input name="accessCode" value="${esc(delegation.accessCode || "")}" readonly></label>
+          <label>Jméno účastníka<input name="participantName" value="${esc(participant.name || "")}"></label>
+          <label>E-mail účastníka<input name="participantEmail" value="${esc(participant.email || "")}"></label>
+          <label>Jméno spoludelegáta<input name="coDelegateName" value="${esc(participant.coDelegateName || "")}"></label>
+          <label>E-mail spoludelegáta<input name="coDelegateEmail" value="${esc(participant.coDelegateEmail || "")}"></label>
+        </div>
+        <label class="full-label">Poznámka<textarea name="note">${esc(participant.note || "")}</textarea></label>
+        <div class="actions">
+          <button class="approve">Uložit údaje</button>
+          <button type="button" class="present" data-editor-checkin="${delegation.id}">Označit přítomno</button>
+          <button type="button" class="reject" data-editor-checkout="${delegation.id}">Označit nepřítomno</button>
+          <button type="button" class="save" data-editor-code="${delegation.id}">Vygenerovat kód</button>
+        </div>
+      </form>
     </div>`;
 }
 
@@ -466,21 +597,33 @@ function bindActions() {
   });
   click("force-projection", () => post("/api/admin/voting/force-projection", {}));
 
-  app.querySelectorAll("[data-layout-seat]").forEach((seat) => seat.onclick = () => moveSeat(Number(seat.dataset.layoutSeat)));
+  app.querySelectorAll("[data-layout-seat]").forEach((seat) => {
+    seat.onpointerdown = startLayoutDrag;
+  });
   app.querySelectorAll("[data-arrange]").forEach((button) => button.onclick = () => arrangeSeats(button.dataset.arrange));
   app.querySelectorAll("[data-code]").forEach((button) => button.onclick = () => post("/api/attendance/generate-code", { delegationId: Number(button.dataset.code) }));
   app.querySelectorAll("[data-checkin]").forEach((button) => button.onclick = () => checkIn(Number(button.dataset.checkin)));
   app.querySelectorAll("[data-checkout]").forEach((button) => button.onclick = () => post("/api/attendance/check-out", { delegationId: Number(button.dataset.checkout) }));
-  app.querySelectorAll("[data-edit-delegation]").forEach((button) => button.onclick = () => editDelegation(Number(button.dataset.editDelegation)));
+  app.querySelectorAll("[data-edit-delegation]").forEach((button) => button.onclick = () => { editingDelegationId = Number(button.dataset.editDelegation); render(); });
+  const closeDelegate = app.querySelector("[data-close-delegate-editor]");
+  if (closeDelegate) closeDelegate.onclick = () => { editingDelegationId = null; render(); };
+  const delegateForm = app.querySelector("[data-form=delegate-details]");
+  if (delegateForm) delegateForm.onsubmit = submitDelegateDetails;
+  app.querySelectorAll("[data-editor-code]").forEach((button) => button.onclick = () => post("/api/attendance/generate-code", { delegationId: Number(button.dataset.editorCode) }));
+  app.querySelectorAll("[data-editor-checkin]").forEach((button) => button.onclick = () => saveDelegateDetails(true));
+  app.querySelectorAll("[data-editor-checkout]").forEach((button) => button.onclick = () => post("/api/attendance/check-out", { delegationId: Number(button.dataset.editorCheckout) }));
 
   const amendmentForm = app.querySelector("[data-form=amendment]");
   if (amendmentForm) amendmentForm.onsubmit = submitAmendment;
   const agendaForm = app.querySelector("[data-form=agenda]");
   if (agendaForm) agendaForm.onsubmit = submitAgenda;
+  const cancelAgendaEdit = app.querySelector("[data-cancel-agenda-edit]");
+  if (cancelAgendaEdit) cancelAgendaEdit.onclick = () => { editingAgendaId = null; render(); };
   const settingsForm = app.querySelector("[data-form=settings]");
   if (settingsForm) settingsForm.onsubmit = submitSettings;
   app.querySelectorAll("[data-form=pin]").forEach((form) => form.onsubmit = submitPin);
   app.querySelectorAll("[data-delete-agenda]").forEach((button) => button.onclick = () => request(`/api/agenda/${button.dataset.deleteAgenda}`, { method: "DELETE" }));
+  app.querySelectorAll("[data-edit-agenda]").forEach((button) => button.onclick = () => { editingAgendaId = Number(button.dataset.editAgenda); panel = "agenda"; render(); });
   click("reset-live", () => confirm("Opravdu resetovat živá data?") && post("/api/settings/reset-live", {}));
   click("reset-all", () => {
     const text = prompt("Pro reset všeho napiš RESET ALL");
@@ -503,7 +646,15 @@ async function submitAmendment(event) {
 async function submitAgenda(event) {
   event.preventDefault();
   const form = event.currentTarget;
-  await post("/api/agenda", { title: form.title.value, type: form.type.value, note: form.note.value });
+  const body = agendaFormBody(form);
+  if (editingAgendaId) {
+    const id = editingAgendaId;
+    body.id = id;
+    editingAgendaId = null;
+    await request(`/api/agenda/${id}`, { method: "PUT", body }, "Agenda uložena.");
+    return;
+  }
+  await post("/api/agenda", body, "Agenda uložena.");
 }
 
 async function submitSettings(event) {
@@ -523,12 +674,122 @@ async function submitPin(event) {
   form.reset();
 }
 
+async function submitDelegateDetails(event) {
+  event.preventDefault();
+  await saveDelegateDetails(false);
+}
+
+async function saveDelegateDetails(markPresent) {
+  const form = app.querySelector("[data-form=delegate-details]");
+  if (!form || !editingDelegationId) return;
+  const existing = state.attendance.delegations.find((item) => item.id === editingDelegationId) || state.delegations.find((item) => item.id === editingDelegationId);
+  const delegation = { ...existing, name: form.name.value.trim(), code: form.code.value.trim(), flag: form.flag.value.trim() };
+  const participant = {
+    delegationId: editingDelegationId,
+    name: form.participantName.value.trim(),
+    email: form.participantEmail.value.trim(),
+    coDelegateName: form.coDelegateName.value.trim(),
+    coDelegateEmail: form.coDelegateEmail.value.trim(),
+    note: form.note.value.trim()
+  };
+  try {
+    await api(`/api/delegations/${editingDelegationId}`, { method: "PUT", body: delegation });
+    if (markPresent) {
+      await api("/api/attendance/check-in", { method: "POST", body: { delegationId: editingDelegationId, participant, note: participant.note } });
+    } else {
+      await api("/api/attendance/participant", { method: "POST", body: participant });
+    }
+    await load(false);
+    showToast(markPresent ? "Údaje uloženy a delegace je přítomná." : "Údaje delegace uloženy.");
+  } catch (err) {
+    showToast(err.message);
+  }
+}
+
+function agendaFormBody(form) {
+  const startsAt = localDateTimeToISO(form.startsAt.value);
+  const endsAt = localDateTimeToISO(form.endsAt.value);
+  const durationMinutes = form.durationMinutes.value ? Number(form.durationMinutes.value) : null;
+  return {
+    title: form.title.value,
+    type: form.type.value,
+    startsAt,
+    endsAt,
+    durationMinutes,
+    note: form.note.value,
+    displayOrder: form.displayOrder.value ? Number(form.displayOrder.value) : 0
+  };
+}
+
+function localDateTimeToISO(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
 async function moveSeat(id) {
   const d = state.delegations.find((item) => item.id === id);
   if (!d) return;
   const seat = d.seat || defaultSeat(state.delegations.indexOf(d));
   const x = (Number(seat.x || 0) + 8) % 86;
   await post("/api/layout/seat", { delegationId: id, x, y: seat.y, w: seat.w, h: seat.h, rotation: seat.rotation || 0 });
+}
+
+function startLayoutDrag(event) {
+  if (panel !== "layout") return;
+  const id = Number(event.currentTarget.dataset.layoutSeat);
+  const delegation = state.delegations.find((item) => item.id === id);
+  if (!delegation) return;
+  event.preventDefault();
+  const stage = event.currentTarget.closest(".stage");
+  const rect = stage.getBoundingClientRect();
+  const seat = delegation.seat || defaultSeat(state.delegations.indexOf(delegation));
+  delegation.seat = { ...seat };
+  draggingLayout = {
+    id,
+    element: event.currentTarget,
+    rect,
+    offsetX: event.clientX - (rect.left + rect.width * seat.x / 100),
+    offsetY: event.clientY - (rect.top + rect.height * seat.y / 100),
+    moved: false
+  };
+  event.currentTarget.setPointerCapture?.(event.pointerId);
+}
+
+function onLayoutDragMove(event) {
+  if (!draggingLayout) return;
+  const delegation = state.delegations.find((item) => item.id === draggingLayout.id);
+  if (!delegation || !delegation.seat) return;
+  const seat = delegation.seat;
+  const x = ((event.clientX - draggingLayout.offsetX - draggingLayout.rect.left) / draggingLayout.rect.width) * 100;
+  const y = ((event.clientY - draggingLayout.offsetY - draggingLayout.rect.top) / draggingLayout.rect.height) * 100;
+  seat.x = clamp(x, 0, 100 - Number(seat.w || 10));
+  seat.y = clamp(y, 0, 100 - Number(seat.h || 10));
+  draggingLayout.element.style.left = `${seat.x}%`;
+  draggingLayout.element.style.top = `${seat.y}%`;
+  draggingLayout.moved = true;
+}
+
+function onLayoutDragEnd() {
+  if (!draggingLayout) return;
+  const id = draggingLayout.id;
+  const moved = draggingLayout.moved;
+  draggingLayout = null;
+  if (moved) saveLayoutSeat(id);
+}
+
+async function saveLayoutSeat(id) {
+  const delegation = state.delegations.find((item) => item.id === id);
+  if (!delegation || !delegation.seat) return;
+  const seat = delegation.seat;
+  await post("/api/layout/seat", {
+    delegationId: id,
+    x: seat.x,
+    y: seat.y,
+    w: seat.w,
+    h: seat.h,
+    rotation: seat.rotation || 0
+  }, "Rozložení uloženo.");
 }
 
 async function arrangeSeats(kind) {
@@ -632,6 +893,49 @@ function option(value, label) {
   return `<option value="${value}">${label}</option>`;
 }
 
+function agendaTypeOptions(selected) {
+  return [
+    ["session", "Jednání"],
+    ["break", "Přestávka"],
+    ["caucus", "Caucus"],
+    ["voting", "Hlasování"],
+    ["organizational", "Organizační"],
+    ["other", "Jiné"]
+  ].map(([value, label]) => `<option value="${value}" ${selected === value ? "selected" : ""}>${label}</option>`).join("");
+}
+
+function agendaTypeLabel(value) {
+  return ({
+    session: "Jednání",
+    break: "Přestávka",
+    caucus: "Caucus",
+    voting: "Hlasování",
+    organizational: "Organizační",
+    other: "Jiné"
+  })[value] || value || "";
+}
+
+function agendaTimeLabel(item) {
+  const parts = [];
+  if (item.startsAt) parts.push(dateTimeLabel(item.startsAt));
+  if (item.endsAt) parts.push(`do ${dateTimeLabel(item.endsAt)}`);
+  if (item.durationMinutes) parts.push(`${item.durationMinutes} min`);
+  return parts.join(" ");
+}
+
+function dateTimeLabel(value) {
+  if (!value) return "";
+  return new Date(value).toLocaleString("cs-CZ", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+}
+
+function dateTimeLocalValue(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 16);
+}
+
 function voteForDelegation(id) {
   return (state.voting.votes || []).find((vote) => vote.delegationId === id)?.choice || "";
 }
@@ -687,6 +991,10 @@ function timeLabel(value) {
 function shorten(text, max) {
   text = String(text || "");
   return text.length <= max ? text : `${text.slice(0, max - 1)}…`;
+}
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
 }
 
 function showToast(message) {

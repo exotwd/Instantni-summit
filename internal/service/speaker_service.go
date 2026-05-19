@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"strings"
+	"time"
 
 	"mun-app/internal/database"
 	"mun-app/internal/domain"
@@ -98,34 +99,94 @@ func (s *SpeakerService) NextSpeaker(ctx context.Context) error {
 			if err := repo.FinishActiveReaction(ctx); err != nil {
 				return err
 			}
-			return repo.SetState(ctx, state.CurrentDelegationID, nil, revision)
+			reactions, err := repo.Reactions(ctx)
+			if err != nil {
+				return err
+			}
+			if next := firstWaitingReaction(reactions); next != nil {
+				activeID, err := repo.StartReaction(ctx, next.ID)
+				if err != nil {
+					return err
+				}
+				return repo.SetActiveReaction(ctx, activeID)
+			}
+			if countFinishedReactions(reactions) >= 2 {
+				return advanceMainSpeaker(ctx, repo)
+			}
+			if state.CurrentDelegationID != nil && state.CurrentPausedMS > 0 {
+				startedAt := time.Now().UTC().Add(-time.Duration(state.CurrentPausedMS) * time.Millisecond)
+				return repo.ResumeCurrent(ctx, startedAt)
+			}
+			return repo.SetActiveReaction(ctx, nil)
 		}
 		reactions, err := repo.Reactions(ctx)
 		if err != nil {
 			return err
 		}
-		if len(reactions) > 0 {
-			activeID, err := repo.StartReaction(ctx, reactions[0].ID)
-			if err != nil {
-				return err
+		if state.CurrentDelegationID != nil {
+			if next := firstWaitingReaction(reactions); next != nil {
+				if err := repo.PauseCurrent(ctx, currentElapsedMS(state)); err != nil {
+					return err
+				}
+				activeID, err := repo.StartReaction(ctx, next.ID)
+				if err != nil {
+					return err
+				}
+				return repo.SetActiveReaction(ctx, activeID)
 			}
-			return repo.SetState(ctx, state.CurrentDelegationID, activeID, revision)
 		}
-		next, err := repo.FirstQueue(ctx)
-		if err != nil {
-			return err
-		}
-		if err := repo.ClearReactions(ctx); err != nil {
-			return err
-		}
-		if next == nil {
-			return repo.SetState(ctx, nil, nil, revision)
-		}
-		if err := repo.RemoveQueue(ctx, next.ID); err != nil {
-			return err
-		}
-		return repo.SetState(ctx, &next.DelegationID, nil, revision)
+		return advanceMainSpeaker(ctx, repo)
 	})
+}
+
+func advanceMainSpeaker(ctx context.Context, repo *repository.SpeakerRepository) error {
+	next, err := repo.FirstQueue(ctx)
+	if err != nil {
+		return err
+	}
+	if err := repo.ClearReactions(ctx); err != nil {
+		return err
+	}
+	if next == nil {
+		return repo.SetCurrent(ctx, nil)
+	}
+	if err := repo.RemoveQueue(ctx, next.ID); err != nil {
+		return err
+	}
+	return repo.SetCurrent(ctx, &next.DelegationID)
+}
+
+func firstWaitingReaction(reactions []domain.SpeakerReaction) *domain.SpeakerReaction {
+	for i := range reactions {
+		if reactions[i].Status == domain.ReactionWaiting {
+			return &reactions[i]
+		}
+	}
+	return nil
+}
+
+func countFinishedReactions(reactions []domain.SpeakerReaction) int {
+	var count int
+	for _, reaction := range reactions {
+		if reaction.Status == domain.ReactionFinished {
+			count++
+		}
+	}
+	return count
+}
+
+func currentElapsedMS(state domain.SpeakerState) int64 {
+	if state.CurrentPausedMS > 0 {
+		return state.CurrentPausedMS
+	}
+	if state.CurrentStartedAt == nil {
+		return 0
+	}
+	elapsed := time.Since(state.CurrentStartedAt.UTC()).Milliseconds()
+	if elapsed < 0 {
+		return 0
+	}
+	return elapsed
 }
 
 func (s *SpeakerService) RemoveSpeaker(ctx context.Context, queueItemID int64) error {
