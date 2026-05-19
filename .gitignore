@@ -1,0 +1,8 @@
+bin/
+data/
+backups/
+web-dist/
+.env
+*.db
+*.db-shm
+*.db-wal

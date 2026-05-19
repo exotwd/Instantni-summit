@@ -16,10 +16,10 @@ Vychozi pristupy:
 
 Rozhrani:
 
-- admin: `http://localhost:8080/admin`
-- projekce: `http://localhost:8080/screen`
-- hlasovani: `http://localhost:8080/vote`
-- healthcheck: `http://localhost:8080/healthz`
+- admin: `http://localhost:8067/admin`
+- projekce: `http://localhost:8067/screen`
+- hlasovani: `http://localhost:8067/vote`
+- healthcheck: `http://localhost:8067/healthz`
 
 ## Testy a build
 

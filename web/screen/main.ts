@@ -22,11 +22,27 @@ async function load(showLogin = true) {
 }
 
 function renderLogin() {
-  app.innerHTML = `<main class="login"><form id="login"><h1>Projekce</h1><input name="pin" type="password" inputmode="numeric" placeholder="Screen PIN" autofocus><button>Přihlásit</button></form></main>`;
+  app.innerHTML = `<main class="login"><form id="login"><h1>Projekce</h1><input name="pin" type="password" inputmode="numeric" placeholder="Screen PIN" autofocus><button>Přihlásit</button><p id="login-error" class="error" role="alert"></p></form></main>`;
   app.querySelector("#login").onsubmit = async (e) => {
     e.preventDefault();
-    try { await api("/api/auth/screen/login", { method: "POST", body: { pin: e.target.pin.value } }); await init(); }
-    catch (err) { alert(err.message); }
+    const form = e.target;
+    const button = form.querySelector("button");
+    const error = form.querySelector("#login-error");
+    error.textContent = "";
+    button.disabled = true;
+    button.textContent = "Přihlašuji...";
+    try {
+      await api("/api/auth/screen/login", { method: "POST", body: { pin: form.pin.value } });
+      const me = await api("/api/auth/me");
+      if (me.role !== "screen") throw new Error("Přihlášení proběhlo, ale prohlížeč neuložil session cookie. Pokud testujete přes HTTP, nastavte COOKIE_SECURE=false, nebo používejte HTTPS doménu.");
+      await load();
+      events(async (event) => { if (acceptEvent(event)) await load(false); }, (s) => { connected = s === "connected"; render(); });
+    }
+    catch (err) {
+      error.textContent = err.message || "Přihlášení selhalo.";
+      button.disabled = false;
+      button.textContent = "Přihlásit";
+    }
   };
 }
 

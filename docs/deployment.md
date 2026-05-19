@@ -36,7 +36,7 @@ sudo cp .env.example /opt/mun-app/.env
 sudo chown -R munapp:munapp /opt/mun-app
 ```
 
-Edit `/opt/mun-app/.env` and set a long random `APP_SECRET`, domain-specific settings, and `COOKIE_SECURE=true`.
+Edit `/opt/mun-app/.env` and set a long random `APP_SECRET`. The default app listener is `APP_ADDR=127.0.0.1:8067`, which keeps the Go process inside the allowed 8067-8070 range.
 
 Install systemd:
 
@@ -59,11 +59,12 @@ Firewall and healthcheck:
 
 ```bash
 sudo ufw allow OpenSSH
-sudo ufw allow 80/tcp
-sudo ufw allow 443/tcp
+sudo ufw allow 8068/tcp
 sudo ufw enable
-curl -f http://127.0.0.1:8080/healthz
+curl -f http://127.0.0.1:8067/healthz
 ```
+
+The bundled Caddy example listens on public port `8068`, proxies to the Go app on `127.0.0.1:8067`, and disables Caddy's default admin port `2019`. If you cannot use ports `80` or `443`, access the app as `http://your-server:8068/admin` and keep `COOKIE_SECURE=false` unless you provide TLS on a custom allowed port.
 
 Backup and restore:
 

@@ -1,4 +1,8 @@
-mun.example.com {
-	reverse_proxy 127.0.0.1:8080
+{
+	admin off
+}
+
+:8068 {
+	reverse_proxy 127.0.0.1:8067
 	encode zstd gzip
 }

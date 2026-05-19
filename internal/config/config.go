@@ -27,7 +27,7 @@ type Config struct {
 
 func Load() Config {
 	return Config{
-		Addr:             env("APP_ADDR", ":8080"),
+		Addr:             env("APP_ADDR", "127.0.0.1:8067"),
 		DBPath:           env("DB_PATH", "/opt/mun-app/data/mun.db"),
 		MigrationsPath:   env("MIGRATIONS_PATH", "migrations"),
 		StaticDir:        env("STATIC_DIR", "web"),
