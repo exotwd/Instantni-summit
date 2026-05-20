@@ -3,12 +3,13 @@ package domain
 import "time"
 
 const (
-	DebateSubmitterReading = "submitter_reading"
-	DebateSelectSupporter  = "select_supporter"
-	DebateSelectOpponent   = "select_opponent"
+	DebateSubmitterReading  = "submitter_reading"
+	DebateSelectSupporter   = "select_supporter"
+	DebateSelectOpponent    = "select_opponent"
 	DebateSupporterSpeaking = "supporter_speaking"
+	DebateOpponentReady     = "opponent_ready"
 	DebateOpponentSpeaking  = "opponent_speaking"
-	DebateReadyToVote      = "ready_to_vote"
+	DebateReadyToVote       = "ready_to_vote"
 )
 
 type DebateSession struct {
