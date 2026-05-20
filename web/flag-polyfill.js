@@ -26,10 +26,20 @@
   var patchTimer = null;
   var speakerClickTimer = null;
 
+  installAntiFlickerStyle();
+
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", startDashboardSpeakerPatch);
   } else {
     startDashboardSpeakerPatch();
+  }
+
+  function installAntiFlickerStyle() {
+    if (document.getElementById("dashboard-speaker-schema-style")) return;
+    var style = document.createElement("style");
+    style.id = "dashboard-speaker-schema-style";
+    style.textContent = ".dashboard-grid.compact-dashboard > .speaker-panel:not([data-schema-patched=\"1\"]) { display: none !important; }";
+    document.head.appendChild(style);
   }
 
   function startDashboardSpeakerPatch() {
@@ -40,7 +50,7 @@
 
   function schedulePatch() {
     clearTimeout(patchTimer);
-    patchTimer = setTimeout(patchDashboardSpeakerSchema, 60);
+    patchTimer = setTimeout(patchDashboardSpeakerSchema, 0);
   }
 
   async function patchDashboardSpeakerSchema() {
