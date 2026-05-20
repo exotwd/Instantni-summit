@@ -251,7 +251,8 @@ function renderReactionSlots() {
     const active = item.status === "active";
     const finished = item.status === "finished";
     const label = active ? "Probíhá: " : finished ? "Dokončeno: " : "";
-    return `<div class="reaction-slot ${active ? "active" : ""} ${finished ? "finished" : ""}" data-remove-reaction="${item.id}">${label}${flagName(item.delegation)}</div>`;
+    const removeAttr = item.status === "waiting" ? ` data-remove-reaction="${item.id}"` : "";
+    return `<div class="reaction-slot ${active ? "active" : ""} ${finished ? "finished" : ""}"${removeAttr}>${label}${flagName(item.delegation)}</div>`;
   }).join("");
 }
 
@@ -310,7 +311,7 @@ function renderLayoutPanel() {
   return `
     <div class="card">
       <h2>Rozložení stolů a prezenční listina</h2>
-      <p>Kliknutím na stůl ho posuneš v jednoduché mřížce. Prezenci a kódy spravuje tabulka pod schématem.</p>
+      <p>Stoly přesuneš tažením přímo ve schématu. Prezenci, kódy a osobní údaje spravuje tabulka pod rozložením.</p>
       <div class="actions">
         <button class="save" data-arrange="circle">Rozložit do kruhu</button>
         <button class="save" data-arrange="u">Rozložit do obráceného U</button>

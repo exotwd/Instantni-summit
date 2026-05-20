@@ -287,7 +287,8 @@ function formatRunningTime(startTime) {
 
 function currentSpeakerTime() {
   const speakerState = state.speakers.state || {};
-  if (state.speakers.activeReaction && speakerState.currentPausedMs) {
+  const reactionActive = !!state.speakers.activeReaction || (state.speakers.reactions || []).some((reaction) => reaction.status === "active");
+  if (reactionActive) {
     return formatSeconds(Math.floor(Number(speakerState.currentPausedMs || 0) / 1000));
   }
   return formatRunningTime(speakerState.currentStartedAt);
