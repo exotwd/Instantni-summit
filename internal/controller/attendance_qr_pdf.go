@@ -163,8 +163,6 @@ func drawQRCard(b *strings.Builder, x, top, w, h float64, delegation domain.Dele
 	roundedRect(b, qrX-qrPad, qrY-qrPad, qrBox+2*qrPad, qrBox+2*qrPad, 14, "1 1 1 rg", "f")
 	roundedRect(b, qrX-qrPad, qrY-qrPad, qrBox+2*qrPad, qrBox+2*qrPad, 14, "0.86 0.88 0.92 RG", "S")
 	drawQRCode(b, link, qrX, qrY, qrBox)
-
-	centerText(b, x+w/2, y+24, 8.2, "F1", "0.24 0.28 0.36 rg", "Naskenujte QR kod pro hlasovani")
 }
 
 func drawQRCode(b *strings.Builder, value string, x, y, size float64) {
