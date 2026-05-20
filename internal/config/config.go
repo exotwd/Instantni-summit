@@ -37,7 +37,7 @@ func Load() Config {
 		AdminTokenTTL:    envDurationHours("ADMIN_SESSION_HOURS", 12),
 		ScreenTokenTTL:   envDurationHours("SCREEN_SESSION_HOURS", 24),
 		DelegateTokenTTL: envDurationHours("DELEGATE_SESSION_HOURS", 12),
-		DefaultAdminPIN:   env("DEFAULT_ADMIN_PIN", "1234"),
+		DefaultAdminPIN:   safeAdminPIN(env("DEFAULT_ADMIN_PIN", "summit-admin-2026")),
 		DefaultScreenPIN:  env("DEFAULT_SCREEN_PIN", "5678"),
 		ConferenceName:   env("CONFERENCE_NAME", "Instantni Summit"),
 		CommitteeName:    env("COMMITTEE_NAME", "Rada EU"),
@@ -73,6 +73,13 @@ func envDurationHours(key string, fallback int) time.Duration {
 		return time.Duration(fallback) * time.Hour
 	}
 	return time.Duration(parsed) * time.Hour
+}
+
+func safeAdminPIN(value string) string {
+	if value == "1234" || len(value) < 8 {
+		return "summit-admin-2026"
+	}
+	return value
 }
 
 func randomDevelopmentSecret() string {

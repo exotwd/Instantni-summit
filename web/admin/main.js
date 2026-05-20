@@ -10,6 +10,7 @@ let speakerClickTimer = null;
 let editingDelegationId = null;
 let editingAgendaId = null;
 let draggingLayout = null;
+let draggingChair = null;
 let manualVoteCursor = 0;
 
 const panels = [
@@ -86,7 +87,7 @@ function renderLogin(message = "") {
         <h1>MUN řízení schůze</h1>
         <p>Administrace předsednictva.</p>
         <label>Admin PIN</label>
-        <input name="pin" type="password" inputmode="numeric" autocomplete="current-password" autofocus>
+        <input name="pin" type="password" autocomplete="current-password" placeholder="např. summit-admin-2026" autofocus>
         <button>Přihlásit</button>
         <p id="login-error" class="error" role="alert">${esc(message)}</p>
       </form>
@@ -348,8 +349,12 @@ function renderLayoutPanel() {
       <div class="actions">
         <button class="save" data-arrange="circle">Rozložit do kruhu</button>
         <button class="save" data-arrange="u">Rozložit do obráceného U</button>
+        <button class="save" data-generate-links>Vygenerovat hlasovací odkazy</button>
+        <button class="save" data-export-attendance>Export XLSX</button>
+        <button class="save" data-import-attendance>Import XLSX</button>
       </div>
       <div class="vote-summary"><strong>Prezenční listina</strong><br>Přítomno: ${present}<br>Nepřítomno: ${absent}</div>
+      <input id="attendanceImportFile" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
     </div>
     <div class="stage-wrap"><div class="stage">${renderChairMarker()}${renderSeats("layout")}</div></div>
     <div class="card">
@@ -463,13 +468,17 @@ function renderSettingsPanel() {
         <div><strong>Výbor</strong><input name="committee_name" value="${esc(values.committee_name || "")}"></div>
         <div><strong>Čas hlasování v sekundách</strong><input name="default_voting_time_sec" type="number" min="1" value="${esc(values.default_voting_time_sec || "60")}"></div>
         <div><strong>Režim hlasování</strong><select name="voting_mode">${option("public", "Veřejné se schématem", votingMode)}${option("secret", "Jednoduché / tajné bez schématu", votingMode)}</select></div>
+        <div><strong>Předsednictvo X (%)</strong><input name="chair_x" type="number" min="0" max="100" step="0.1" value="${esc(values.chair_x || "38")}"></div>
+        <div><strong>Předsednictvo Y (%)</strong><input name="chair_y" type="number" min="0" max="100" step="0.1" value="${esc(values.chair_y || "2.2")}"></div>
+        <div><strong>Šířka stolku (%)</strong><input name="chair_w" type="number" min="8" max="60" step="0.1" value="${esc(values.chair_w || "24")}"></div>
+        <div><strong>Výška stolku (%)</strong><input name="chair_h" type="number" min="4" max="20" step="0.1" value="${esc(values.chair_h || "7")}"></div>
       </div>
       <div class="actions"><button class="approve">Uložit nastavení</button></div>
     </form>
     <div class="settings-grid">
       <form class="card" data-form="pin" data-pin="admin">
         <h2>Admin PIN</h2>
-        <input name="pin" type="password" placeholder="Nový admin PIN">
+        <input name="pin" type="password" placeholder="Nové admin heslo, min. 8 znaků">
         <button class="save">Změnit admin PIN</button>
       </form>
       <form class="card" data-form="pin" data-pin="screen">
@@ -492,11 +501,14 @@ function renderAttendanceTable() {
   return `
     <div class="attendance-table-wrap">
       <table class="attendance-table">
-        <thead><tr><th>Stát</th><th>Kód</th><th>Přítomen</th><th>Účastník</th><th>Akce</th></tr></thead>
+        <thead><tr><th>Stát</th><th>Hlasovací odkaz</th><th>4místný kód</th><th>Přítomen</th><th>Účastník</th><th>Akce</th></tr></thead>
         <tbody>${state.attendance.delegations.map((d) => `
           <tr>
             <td><strong>${flagName(d)}</strong><br><span class="muted">${esc(d.code)}</span></td>
-            <td><span class="attendance-code">${esc(d.accessCode || "—")}</span></td>
+            <td>${d.voteLinkToken
+              ? `<button class="save compact-button" data-copy-vote-link="${esc(d.voteLinkToken)}">Kopírovat odkaz</button><br><span class="muted link-token">${esc(d.voteLinkToken)}</span>`
+              : `<span class="muted">Nevygenerován</span>`}</td>
+            <td><span class="attendance-code">${esc(d.accessCode || "—")}</span><br><span class="muted">${d.accessCodeEnabled ? "aktivní" : "vypnutý"}</span></td>
             <td>${d.present ? "Ano" : "Ne"}</td>
             <td>${esc(d.participant?.name || "")}</td>
             <td>
@@ -515,6 +527,7 @@ function renderDelegateEditor() {
   const delegation = state.attendance.delegations.find((item) => item.id === editingDelegationId) || state.delegations.find((item) => item.id === editingDelegationId);
   if (!delegation) return "";
   const participant = delegation.participant || {};
+  const link = voteLinkUrl(delegation.voteLinkToken);
   return `
     <div class="modal-backdrop" role="dialog" aria-modal="true">
       <form class="modal-card delegate-editor" data-form="delegate-details">
@@ -530,6 +543,8 @@ function renderDelegateEditor() {
           <label>Zkratka<input name="code" value="${esc(delegation.code || "")}"></label>
           <label>Vlajka<input name="flag" value="${esc(delegation.flag || "")}"></label>
           <label>4místný kód<input name="accessCode" value="${esc(delegation.accessCode || "")}" readonly></label>
+          <label class="toggle-line"><input name="accessCodeEnabled" type="checkbox" ${delegation.accessCodeEnabled ? "checked" : ""}> Povolit přihlášení 4místným kódem</label>
+          <label>Unikátní odkaz<input value="${esc(link || "Zatím není vygenerovaný")}" readonly></label>
           <label>Jméno účastníka<input name="participantName" value="${esc(participant.name || "")}"></label>
           <label>E-mail účastníka<input name="participantEmail" value="${esc(participant.email || "")}"></label>
           <label>Jméno spoludelegáta<input name="coDelegateName" value="${esc(participant.coDelegateName || "")}"></label>
@@ -541,6 +556,7 @@ function renderDelegateEditor() {
           <button type="button" class="present" data-editor-checkin="${delegation.id}">Označit přítomno</button>
           <button type="button" class="reject" data-editor-checkout="${delegation.id}">Označit nepřítomno</button>
           <button type="button" class="save" data-editor-code="${delegation.id}">Vygenerovat kód</button>
+          ${link ? `<button type="button" class="save" data-copy-vote-link="${esc(delegation.voteLinkToken)}">Kopírovat odkaz</button>` : ""}
         </div>
       </form>
     </div>`;
@@ -588,8 +604,10 @@ function renderSeats(mode) {
 }
 
 function renderChairMarker() {
+  const chair = chairSeat();
+  const draggable = panel === "layout" ? ` data-chair-seat` : "";
   return `
-    <div class="chair-marker" aria-label="Předsedající">
+    <div class="chair-marker"${draggable} aria-label="Předsedající" style="left:${chair.x}%;top:${chair.y}%;width:${chair.w}%;min-height:${chair.h}%;transform:rotate(${chair.rotation}deg);">
       <div class="chair-label">PŘEDSEDNICTVO</div>
       <div class="chair-desk">CHAIR</div>
     </div>`;
@@ -597,6 +615,22 @@ function renderChairMarker() {
 
 function isSecretVotingMode() {
   return (state?.settings?.values?.voting_mode || "public") === "secret";
+}
+
+function chairSeat() {
+  const values = state?.settings?.values || {};
+  return {
+    x: numberSetting(values.chair_x, 38),
+    y: numberSetting(values.chair_y, 2.2),
+    w: numberSetting(values.chair_w, 24),
+    h: numberSetting(values.chair_h, 7),
+    rotation: numberSetting(values.chair_rotation, 0)
+  };
+}
+
+function numberSetting(value, fallback) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
 }
 
 function canStartVotingFor(item) {
@@ -613,7 +647,7 @@ function bindActions() {
   if (reload) reload.onclick = () => load();
   const screen = app.querySelector("[data-open-screen]");
   if (screen) screen.onclick = () => window.open("/screen", "_blank");
-  click("logout", async () => { await api("/api/auth/logout", { method: "POST" }); state = null; renderLogin(); });
+  click("logout", async () => { await api("/api/auth/logout?role=admin", { method: "POST" }); state = null; renderLogin(); });
 
   app.querySelectorAll("[data-speaker-seat]").forEach((seat) => {
     seat.onclick = () => {
@@ -675,6 +709,9 @@ function bindActions() {
   app.querySelectorAll("[data-layout-seat]").forEach((seat) => {
     seat.onpointerdown = startLayoutDrag;
   });
+  app.querySelectorAll("[data-chair-seat]").forEach((chair) => {
+    chair.onpointerdown = startChairDrag;
+  });
   app.querySelectorAll("[data-seat-tool]").forEach((button) => {
     button.onpointerdown = (event) => event.stopPropagation();
   });
@@ -691,17 +728,28 @@ function bindActions() {
     };
   });
   app.querySelectorAll("[data-arrange]").forEach((button) => button.onclick = () => arrangeSeats(button.dataset.arrange));
+  const importButton = app.querySelector("[data-import-attendance]");
+  const importFile = app.querySelector("#attendanceImportFile");
+  if (importButton && importFile) {
+    importButton.onclick = () => importFile.click();
+    importFile.onchange = () => importAttendanceFile(importFile.files?.[0]);
+  }
+  const exportButton = app.querySelector("[data-export-attendance]");
+  if (exportButton) exportButton.onclick = exportAttendanceXlsx;
+  const generateLinksButton = app.querySelector("[data-generate-links]");
+  if (generateLinksButton) generateLinksButton.onclick = generateVoteLinks;
+  app.querySelectorAll("[data-copy-vote-link]").forEach((button) => button.onclick = () => copyVoteLink(button.dataset.copyVoteLink));
   app.querySelectorAll("[data-code]").forEach((button) => button.onclick = () => post("/api/attendance/generate-code", { delegationId: Number(button.dataset.code) }));
-  app.querySelectorAll("[data-checkin]").forEach((button) => button.onclick = () => checkIn(Number(button.dataset.checkin)));
-  app.querySelectorAll("[data-checkout]").forEach((button) => button.onclick = () => post("/api/attendance/check-out", { delegationId: Number(button.dataset.checkout) }));
+  app.querySelectorAll("[data-checkin]").forEach((button) => button.onclick = () => setPresence(Number(button.dataset.checkin), true));
+  app.querySelectorAll("[data-checkout]").forEach((button) => button.onclick = () => setPresence(Number(button.dataset.checkout), false));
   app.querySelectorAll("[data-edit-delegation]").forEach((button) => button.onclick = () => { editingDelegationId = Number(button.dataset.editDelegation); render(); });
   const closeDelegate = app.querySelector("[data-close-delegate-editor]");
   if (closeDelegate) closeDelegate.onclick = () => { editingDelegationId = null; render(); };
   const delegateForm = app.querySelector("[data-form=delegate-details]");
   if (delegateForm) delegateForm.onsubmit = submitDelegateDetails;
   app.querySelectorAll("[data-editor-code]").forEach((button) => button.onclick = () => post("/api/attendance/generate-code", { delegationId: Number(button.dataset.editorCode) }));
-  app.querySelectorAll("[data-editor-checkin]").forEach((button) => button.onclick = () => saveDelegateDetails(true));
-  app.querySelectorAll("[data-editor-checkout]").forEach((button) => button.onclick = () => post("/api/attendance/check-out", { delegationId: Number(button.dataset.editorCheckout) }));
+  app.querySelectorAll("[data-editor-checkin]").forEach((button) => button.onclick = () => setPresence(Number(button.dataset.editorCheckin), true));
+  app.querySelectorAll("[data-editor-checkout]").forEach((button) => button.onclick = () => setPresence(Number(button.dataset.editorCheckout), false));
 
   const amendmentForm = app.querySelector("[data-form=amendment]");
   if (amendmentForm) amendmentForm.onsubmit = submitAmendment;
@@ -754,7 +802,11 @@ async function submitSettings(event) {
     conference_name: form.conference_name.value,
     committee_name: form.committee_name.value,
     default_voting_time_sec: String(form.default_voting_time_sec.value || "60"),
-    voting_mode: form.voting_mode.value
+    voting_mode: form.voting_mode.value,
+    chair_x: String(form.chair_x.value || "38"),
+    chair_y: String(form.chair_y.value || "2.2"),
+    chair_w: String(form.chair_w.value || "24"),
+    chair_h: String(form.chair_h.value || "7")
   });
 }
 
@@ -767,14 +819,14 @@ async function submitPin(event) {
 
 async function submitDelegateDetails(event) {
   event.preventDefault();
-  await saveDelegateDetails(false);
+  await saveDelegateDetails();
 }
 
-async function saveDelegateDetails(markPresent) {
+async function saveDelegateDetails() {
   const form = app.querySelector("[data-form=delegate-details]");
   if (!form || !editingDelegationId) return;
   const existing = state.attendance.delegations.find((item) => item.id === editingDelegationId) || state.delegations.find((item) => item.id === editingDelegationId);
-  const delegation = { ...existing, name: form.name.value.trim(), code: form.code.value.trim(), flag: form.flag.value.trim() };
+  const delegation = { ...existing, name: form.name.value.trim(), code: form.code.value.trim(), flag: form.flag.value.trim(), accessCodeEnabled: form.accessCodeEnabled.checked };
   const participant = {
     delegationId: editingDelegationId,
     name: form.participantName.value.trim(),
@@ -785,13 +837,9 @@ async function saveDelegateDetails(markPresent) {
   };
   try {
     await api(`/api/delegations/${editingDelegationId}`, { method: "PUT", body: delegation });
-    if (markPresent) {
-      await api("/api/attendance/check-in", { method: "POST", body: { delegationId: editingDelegationId, participant, note: participant.note } });
-    } else {
-      await api("/api/attendance/participant", { method: "POST", body: participant });
-    }
+    await api("/api/attendance/participant", { method: "POST", body: participant });
     await load(false);
-    showToast(markPresent ? "Údaje uloženy a delegace je přítomná." : "Údaje delegace uloženy.");
+    showToast("Údaje delegace uloženy.");
   } catch (err) {
     showToast(err.message);
   }
@@ -847,7 +895,35 @@ function startLayoutDrag(event) {
   event.currentTarget.setPointerCapture?.(event.pointerId);
 }
 
+function startChairDrag(event) {
+  if (panel !== "layout") return;
+  event.preventDefault();
+  const stage = event.currentTarget.closest(".stage");
+  const rect = stage.getBoundingClientRect();
+  const seat = chairSeat();
+  draggingChair = {
+    element: event.currentTarget,
+    rect,
+    seat,
+    offsetX: event.clientX - (rect.left + rect.width * seat.x / 100),
+    offsetY: event.clientY - (rect.top + rect.height * seat.y / 100),
+    moved: false
+  };
+  event.currentTarget.setPointerCapture?.(event.pointerId);
+}
+
 function onLayoutDragMove(event) {
+  if (draggingChair) {
+    const seat = draggingChair.seat;
+    const x = ((event.clientX - draggingChair.offsetX - draggingChair.rect.left) / draggingChair.rect.width) * 100;
+    const y = ((event.clientY - draggingChair.offsetY - draggingChair.rect.top) / draggingChair.rect.height) * 100;
+    seat.x = clamp(x, 0, 100 - Number(seat.w || 24));
+    seat.y = clamp(y, 0, 100 - Number(seat.h || 7));
+    draggingChair.element.style.left = `${seat.x}%`;
+    draggingChair.element.style.top = `${seat.y}%`;
+    draggingChair.moved = true;
+    return;
+  }
   if (!draggingLayout) return;
   const delegation = state.delegations.find((item) => item.id === draggingLayout.id);
   if (!delegation || !delegation.seat) return;
@@ -862,11 +938,31 @@ function onLayoutDragMove(event) {
 }
 
 function onLayoutDragEnd() {
+  if (draggingChair) {
+    const chair = draggingChair;
+    draggingChair = null;
+    if (chair.moved) saveChairSeat(chair.seat);
+    return;
+  }
   if (!draggingLayout) return;
   const id = draggingLayout.id;
   const moved = draggingLayout.moved;
   draggingLayout = null;
   if (moved) saveLayoutSeat(id);
+}
+
+async function saveChairSeat(seat) {
+  await post("/api/settings", {
+    chair_x: String(roundSeat(seat.x)),
+    chair_y: String(roundSeat(seat.y)),
+    chair_w: String(roundSeat(seat.w)),
+    chair_h: String(roundSeat(seat.h)),
+    chair_rotation: String(roundSeat(seat.rotation || 0))
+  }, "Stůl předsednictva uložen.");
+}
+
+function roundSeat(value) {
+  return Math.round(Number(value || 0) * 100) / 100;
 }
 
 async function saveLayoutSeat(id) {
@@ -964,17 +1060,64 @@ async function editDelegation(id) {
   await request(`/api/delegations/${id}`, { method: "PUT", body: { ...d, name, code, flag } });
 }
 
-async function checkIn(id) {
-  const d = state.delegations.find((item) => item.id === id);
-  const name = prompt("Jméno účastníka", d?.participant?.name || "") || "";
-  const email = prompt("E-mail účastníka", d?.participant?.email || "") || "";
-  const coDelegateName = prompt("Jméno spoludelegáta", d?.participant?.coDelegateName || "") || "";
-  const coDelegateEmail = prompt("E-mail spoludelegáta", d?.participant?.coDelegateEmail || "") || "";
-  await post("/api/attendance/check-in", {
-    delegationId: id,
-    note: "",
-    participant: { delegationId: id, name, email, coDelegateName, coDelegateEmail, note: "" }
-  });
+async function setPresence(id, present) {
+  const path = present ? "/api/attendance/check-in" : "/api/attendance/check-out";
+  await post(path, { delegationId: id }, present ? "Delegace označena jako přítomná." : "Delegace označena jako nepřítomná.");
+}
+
+async function generateVoteLinks() {
+  if (!confirm("Vygenerovat nové unikátní hlasovací odkazy pro všechny delegace? Stávající odkazy se tím nahradí.")) return;
+  await request("/api/attendance/generate-links", { method: "POST", body: {} }, "Hlasovací odkazy byly vygenerovány.");
+}
+
+async function exportAttendanceXlsx() {
+  try {
+    const res = await fetch("/api/attendance/export", { method: "POST" });
+    if (!res.ok) throw new Error(`Export selhal (${res.status}).`);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "prezence.xlsx";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    showToast("Export XLSX připraven.");
+  } catch (err) {
+    showToast(err.message);
+  }
+}
+
+async function importAttendanceFile(file) {
+  if (!file) return;
+  const form = new FormData();
+  form.append("file", file);
+  try {
+    const res = await fetch("/api/attendance/import", { method: "POST", body: form });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) throw new Error(data?.error?.message || `Import selhal (${res.status}).`);
+    await load(false);
+    showToast(`Importováno řádků: ${data?.imported ?? 0}`);
+  } catch (err) {
+    showToast(err.message);
+  }
+}
+
+async function copyVoteLink(token) {
+  const link = voteLinkUrl(token);
+  if (!link) return;
+  try {
+    await navigator.clipboard.writeText(link);
+    showToast("Hlasovací odkaz zkopírován.");
+  } catch {
+    showToast(link);
+  }
+}
+
+function voteLinkUrl(token) {
+  if (!token) return "";
+  return `${window.location.origin}/vote?token=${encodeURIComponent(token)}`;
 }
 
 async function post(path, body, message = "Uloženo.") {

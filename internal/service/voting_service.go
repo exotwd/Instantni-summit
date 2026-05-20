@@ -144,22 +144,6 @@ func (s *VotingService) SaveResult(ctx context.Context, sessionID int64) error {
 		if err := votes.SetStatus(ctx, sessionID, domain.VotingSaved, revision); err != nil {
 			return err
 		}
-		opticalChoice := domain.VoteAgainst
-		if passed {
-			opticalChoice = domain.VoteFor
-		}
-		delegations, err := repository.NewDelegationRepository(tx).List(ctx, false)
-		if err != nil {
-			return err
-		}
-		for _, delegation := range delegations {
-			if !delegation.Present {
-				continue
-			}
-			if err := votes.Cast(ctx, sessionID, delegation.ID, opticalChoice, domain.SourceAdmin, revision); err != nil {
-				return err
-			}
-		}
 		if session.AmendmentID != nil {
 			amendments := repository.NewAmendmentRepository(tx)
 			amendment, err := amendments.Get(ctx, *session.AmendmentID)
@@ -223,6 +207,22 @@ func (s *VotingService) SaveOpticalResult(ctx context.Context, sessionID int64, 
 		}
 		if err := votes.SetStatus(ctx, sessionID, domain.VotingSaved, revision); err != nil {
 			return err
+		}
+		opticalChoice := domain.VoteAgainst
+		if passed {
+			opticalChoice = domain.VoteFor
+		}
+		delegations, err := repository.NewDelegationRepository(tx).List(ctx, false)
+		if err != nil {
+			return err
+		}
+		for _, delegation := range delegations {
+			if !delegation.Present {
+				continue
+			}
+			if err := votes.Cast(ctx, sessionID, delegation.ID, opticalChoice, domain.SourceAdmin, revision); err != nil {
+				return err
+			}
 		}
 		if session.AmendmentID != nil {
 			amendments := repository.NewAmendmentRepository(tx)

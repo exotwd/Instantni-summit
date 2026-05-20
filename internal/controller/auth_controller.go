@@ -41,13 +41,24 @@ func (api *API) ScreenLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *API) Logout(w http.ResponseWriter, r *http.Request) {
-	for _, name := range []string{adminCookie, screenCookie} {
-		if cookie, err := r.Cookie(name); err == nil {
-			_ = api.auth.Logout(r.Context(), cookie.Value)
-		}
-		clearCookie(w, name)
+	role := r.URL.Query().Get("role")
+	if role == "" {
+		role = domain.RoleAdmin
 	}
-	clearCookie(w, delegateCookie)
+	cookies := map[string]string{
+		domain.RoleAdmin:    adminCookie,
+		domain.RoleScreen:   screenCookie,
+		domain.RoleDelegate: delegateCookie,
+	}
+	name, ok := cookies[role]
+	if !ok {
+		writeError(w, http.StatusBadRequest, "invalid_role", "Neplatná role pro odhlášení.")
+		return
+	}
+	if cookie, err := r.Cookie(name); err == nil && role != domain.RoleDelegate {
+		_ = api.auth.Logout(r.Context(), cookie.Value)
+	}
+	clearCookie(w, name)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 

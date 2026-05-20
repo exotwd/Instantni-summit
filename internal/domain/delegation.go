@@ -9,6 +9,9 @@ type Delegation struct {
 	Flag                string       `json:"flag"`
 	AccessCode          string       `json:"accessCode,omitempty"`
 	AccessCodeCreatedAt *time.Time   `json:"accessCodeCreatedAt,omitempty"`
+	AccessCodeEnabled   bool         `json:"accessCodeEnabled"`
+	VoteLinkToken       string       `json:"voteLinkToken,omitempty"`
+	VoteLinkCreatedAt   *time.Time   `json:"voteLinkCreatedAt,omitempty"`
 	Present             bool         `json:"present"`
 	DisplayOrder        int          `json:"displayOrder"`
 	CreatedAt           time.Time    `json:"createdAt"`

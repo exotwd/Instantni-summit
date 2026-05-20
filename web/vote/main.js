@@ -11,6 +11,21 @@ init();
 window.setInterval(updateMobileVoteCountdown, 500);
 
 async function init() {
+  const token = new URLSearchParams(window.location.search).get("token");
+  if (token) {
+    try {
+      await api("/api/vote/link-login", { method: "POST", body: { token } });
+      window.history.replaceState({}, document.title, "/vote");
+      await load(false);
+      connectRealtime();
+      showToast("Přihlášeno odkazem.");
+      return;
+    } catch (err) {
+      window.history.replaceState({}, document.title, "/vote");
+      renderLogin(err.message);
+      return;
+    }
+  }
   try {
     await load(false);
     connectRealtime();
@@ -64,7 +79,7 @@ function renderLogin(message = "") {
       </div>
       <form id="loginCard" class="card login-card">
         <h2>Přihlášení</h2>
-        <p>Zadej 4místný kód od předsedajícího.</p>
+        <p>Zadej 4místný kód od předsedajícího. Kód funguje jen po povolení v prezenční listině; unikátní odkaz funguje vždy.</p>
         <label for="loginCode">4místný kód</label>
         <input id="loginCode" name="code" class="code-input" inputmode="numeric" maxlength="4" autocomplete="one-time-code" placeholder="••••" autofocus>
         <div class="button-row"><button>Přihlásit</button></div>
@@ -277,8 +292,11 @@ async function cast(choice) {
   }
 }
 
-function logout() {
+async function logout() {
   localStorage.removeItem("munVotingCode");
+  try {
+    await api("/api/auth/logout?role=delegate", { method: "POST" });
+  } catch {}
   state = null;
   renderLogin();
 }

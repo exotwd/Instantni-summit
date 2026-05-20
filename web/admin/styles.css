@@ -1,3 +1,9 @@
+@font-face {
+  font-family: "Twemoji Flags";
+  unicode-range: U+1F1E6-1F1FF, U+1F3F4, U+E0062-E0063, U+E0065, U+E0067, U+E006C, U+E006E, U+E0073-E0074, U+E0077, U+E007F;
+  src: url("https://cdn.jsdelivr.net/npm/country-flag-emoji-polyfill@0.1/dist/TwemojiCountryFlags.woff2") format("woff2");
+}
+
 :root {
   --bg: #f6f7f9;
   --surface: #ffffff;
@@ -340,6 +346,11 @@ button:disabled {
     linear-gradient(180deg, #ffffff, #f8fafc);
 }
 
+html.flag-emoji-polyfill,
+html.flag-emoji-polyfill body {
+  font-family: "Twemoji Flags", Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+}
+
 .chair-marker {
   position: absolute;
   left: 50%;
@@ -355,7 +366,16 @@ button:disabled {
   color: #fff;
   text-align: center;
   box-shadow: 0 10px 28px rgba(15, 23, 42, .18);
-  pointer-events: none;
+  cursor: default;
+  pointer-events: auto;
+}
+
+.chair-marker[data-chair-seat] {
+  cursor: grab;
+}
+
+.chair-marker[data-chair-seat]:active {
+  cursor: grabbing;
 }
 
 .chair-label {
@@ -596,7 +616,7 @@ button:disabled {
 .attendance-table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 820px;
+  min-width: 1120px;
 }
 
 .attendance-table th,
@@ -615,6 +635,17 @@ button:disabled {
   color: #fff;
   font-weight: 900;
   letter-spacing: .08em;
+}
+
+.compact-button {
+  padding: 7px 10px;
+  min-height: 0;
+}
+
+.link-token {
+  display: inline-block;
+  margin-top: 6px;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
 }
 
 .muted {
@@ -746,6 +777,18 @@ button:disabled {
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: .045em;
+}
+
+.toggle-line {
+  align-content: center;
+  grid-template-columns: auto 1fr;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.toggle-line input {
+  width: auto;
+  margin: 0;
 }
 
 .full-label {

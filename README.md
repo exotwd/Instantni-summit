@@ -11,7 +11,7 @@ make dev
 
 Vychozi pristupy:
 
-- admin PIN: `1234`
+- admin PIN: `summit-admin-2026`
 - screen PIN: `5678`
 
 Rozhrani:

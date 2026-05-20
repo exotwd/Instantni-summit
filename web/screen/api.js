@@ -3,8 +3,16 @@ export async function api(path, options = {}) {
   if (init.body && typeof init.body !== "string") init.body = JSON.stringify(init.body);
   const res = await fetch(path, init);
   const text = await res.text();
-  const data = text ? JSON.parse(text) : null;
-  if (!res.ok) throw new Error(data?.error?.message || "Požadavek selhal.");
+  let data = null;
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      const preview = text.replace(/\s+/g, " ").slice(0, 180);
+      throw new Error(`Server nevrátil JSON odpověď (${res.status}). ${preview || "Prázdná odpověď."}`);
+    }
+  }
+  if (!res.ok) throw new Error(data?.error?.message || `Požadavek selhal (${res.status}).`);
   return data;
 }
 

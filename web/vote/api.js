@@ -10,7 +10,8 @@ export async function api(path, options = {}) {
     try {
       data = JSON.parse(text);
     } catch {
-      throw new Error("Server vrátil neplatnou JSON odpověď.");
+      const preview = text.replace(/\s+/g, " ").slice(0, 180);
+      throw new Error(`Server nevrátil JSON odpověď (${res.status}). ${preview || "Prázdná odpověď."}`);
     }
   }
   if (!res.ok) {

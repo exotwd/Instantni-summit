@@ -30,7 +30,7 @@ func NewAuthService(db *sql.DB, cfg config.Config) *AuthService {
 func (s *AuthService) EnsureDefaults(ctx context.Context) error {
 	settings := repository.NewSettingsRepository(s.db)
 	values := map[string]string{}
-	if _, ok, err := settings.Get(ctx, "admin_pin_hash"); err != nil {
+	if hash, ok, err := settings.Get(ctx, "admin_pin_hash"); err != nil {
 		return err
 	} else if !ok {
 		hash, err := HashPIN(s.cfg.DefaultAdminPIN)
@@ -39,6 +39,14 @@ func (s *AuthService) EnsureDefaults(ctx context.Context) error {
 		}
 		values["admin_pin_hash"] = hash
 		values["admin_pin_is_default"] = "true"
+	} else if isDefault, _, err := settings.Get(ctx, "admin_pin_is_default"); err != nil {
+		return err
+	} else if isDefault == "true" && !VerifyPIN(s.cfg.DefaultAdminPIN, hash) {
+		hash, err := HashPIN(s.cfg.DefaultAdminPIN)
+		if err != nil {
+			return err
+		}
+		values["admin_pin_hash"] = hash
 	}
 	if _, ok, err := settings.Get(ctx, "screen_pin_hash"); err != nil {
 		return err

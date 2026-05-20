@@ -285,7 +285,34 @@ function renderSeatMap(mode, large) {
 }
 
 function renderChairMarker() {
-  return `<div class="chair-marker"><div class="chair-label">PŘEDSEDNICTVO</div><div class="chair-desk">CHAIR</div></div>`;
+  const chair = projectionChairSeat(chairSeat());
+  return `<div class="chair-marker" style="left:${chair.x}%;top:${chair.y}%;width:${chair.w}%;min-height:${chair.h}%;transform:rotate(${chair.rotation}deg);"><div class="chair-label">PŘEDSEDNICTVO</div><div class="chair-desk">CHAIR</div></div>`;
+}
+
+function chairSeat() {
+  const values = state?.settings?.values || {};
+  return {
+    x: numberSetting(values.chair_x, 38),
+    y: numberSetting(values.chair_y, 2.2),
+    w: numberSetting(values.chair_w, 24),
+    h: numberSetting(values.chair_h, 7),
+    rotation: numberSetting(values.chair_rotation, 0)
+  };
+}
+
+function projectionChairSeat(seat) {
+  return {
+    x: clamp(Number(seat.x || 0), 0, 100 - Number(seat.w || 24)),
+    y: clamp(100 - Number(seat.y || 0) - Number(seat.h || 7), 0, 100 - Number(seat.h || 7)),
+    w: Number(seat.w || 24),
+    h: Number(seat.h || 7),
+    rotation: Number(seat.rotation || 0)
+  };
+}
+
+function numberSetting(value, fallback) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
 }
 
 function projectionSeat(seat, large) {

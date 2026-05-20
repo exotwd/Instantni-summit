@@ -102,6 +102,9 @@ func (s *SettingsService) ChangeScreenPIN(ctx context.Context, pin string) error
 }
 
 func (s *SettingsService) changePIN(ctx context.Context, role, pin string) error {
+	if role == "admin" && len(pin) < 8 {
+		return NewUserError("invalid_pin", "Admin heslo musí mít alespoň 8 znaků.")
+	}
 	if len(pin) < 4 {
 		return NewUserError("invalid_pin", "PIN musí mít alespoň 4 znaky.")
 	}
