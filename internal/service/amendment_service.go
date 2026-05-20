@@ -181,10 +181,8 @@ func (s *AmendmentService) SelectDebateDelegation(ctx context.Context, delegatio
 				return NewUserError("same_delegation", "Podporovatel a odpůrce nesmí být stejná delegace.")
 			}
 			session.OpponentDelegationID = &delegationID
-			session.Phase = domain.DebateSupporterSpeaking
-			if session.SupporterDelegationID == nil {
-				session.Phase = domain.DebateOpponentSpeaking
-			}
+			// Selection only stores the opponent. The chair must click once more to start the next speech.
+			session.Phase = domain.DebateSelectOpponent
 		default:
 			return NewUserError("debate_not_selecting", "Teď se nevybírá delegace do jednání.")
 		}
@@ -196,6 +194,7 @@ func (s *AmendmentService) AdvanceDebate(ctx context.Context) error {
 	return s.updateDebate(ctx, func(session *domain.DebateSession) error {
 		switch session.Phase {
 		case domain.DebateSubmitterReading:
+			// First click after the submitter ends the speech and opens the supporter/opponent selection.
 			session.Phase = domain.DebateSelectSupporter
 		case domain.DebateSelectSupporter:
 			if session.SupporterDelegationID == nil {
@@ -206,23 +205,17 @@ func (s *AmendmentService) AdvanceDebate(ctx context.Context) error {
 			if session.OpponentDelegationID == nil {
 				return NewUserError("missing_opponent", "Nejdřív vyber odpůrce návrhu.")
 			}
-			if session.OpponentDelegationID != nil {
-				session.Phase = domain.DebateSupporterSpeaking
-				if session.SupporterDelegationID == nil {
-					session.Phase = domain.DebateOpponentSpeaking
-				}
-			} else if session.SupporterDelegationID != nil {
+			if session.SupporterDelegationID != nil {
+				// Second click after the selection starts the supporter speech.
 				session.Phase = domain.DebateSupporterSpeaking
 			} else {
-				session.Phase = domain.DebateReadyToVote
+				session.Phase = domain.DebateOpponentSpeaking
 			}
 		case domain.DebateSupporterSpeaking:
-			if session.OpponentDelegationID != nil {
-				session.Phase = domain.DebateOpponentSpeaking
-			} else {
-				session.Phase = domain.DebateReadyToVote
-			}
+			// First click after the supporter ends the speech. Opponent speech starts only after another click.
+			session.Phase = domain.DebateSelectOpponent
 		case domain.DebateOpponentSpeaking:
+			// First click after the opponent ends the speech and makes the PN ready for voting.
 			session.Phase = domain.DebateReadyToVote
 		case domain.DebateReadyToVote:
 			return nil
