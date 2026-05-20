@@ -45,6 +45,15 @@ func (api *API) IntroduceAmendment(w http.ResponseWriter, r *http.Request) {
 	respond(w, map[string]string{"status": "ok"}, api.amendments.Introduce(r.Context(), id))
 }
 
+func (api *API) AcceptAmendment(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_id", "Neplatné ID návrhu.")
+		return
+	}
+	respond(w, map[string]string{"status": "ok"}, api.amendments.Accept(r.Context(), id))
+}
+
 func (api *API) RejectAmendment(w http.ResponseWriter, r *http.Request) {
 	id, err := pathID(r)
 	if err != nil {
@@ -61,6 +70,25 @@ func (api *API) StartDebate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	respond(w, map[string]string{"status": "ok"}, api.amendments.StartDebate(r.Context(), id))
+}
+
+func (api *API) SelectDebateDelegation(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		DelegationID int64 `json:"delegationId"`
+	}
+	if err := decode(r, &req); err != nil || req.DelegationID == 0 {
+		writeError(w, http.StatusBadRequest, "missing_delegation", "Chybí delegace.")
+		return
+	}
+	respond(w, map[string]string{"status": "ok"}, api.amendments.SelectDebateDelegation(r.Context(), req.DelegationID))
+}
+
+func (api *API) AdvanceDebate(w http.ResponseWriter, r *http.Request) {
+	respond(w, map[string]string{"status": "ok"}, api.amendments.AdvanceDebate(r.Context()))
+}
+
+func (api *API) CancelDebate(w http.ResponseWriter, r *http.Request) {
+	respond(w, map[string]string{"status": "ok"}, api.amendments.CancelDebate(r.Context()))
 }
 
 func (api *API) Resolution(w http.ResponseWriter, r *http.Request) {

@@ -12,7 +12,7 @@ export function events(onEvent, onStatus) {
   const source = new EventSource("/api/events?role=screen");
   source.onopen = () => onStatus("connected");
   source.onerror = () => onStatus("disconnected");
-  ["voting.updated","voting.closed","voting.reopened","voting.saved","voting.cancelled","speaker.updated","resolution.updated","layout.updated","break.started","break.ended","debate.updated","reset.performed"].forEach(type => {
+  ["voting.updated","voting.closed","voting.reopened","voting.saved","voting.cancelled","speaker.updated","resolution.updated","layout.updated","break.started","break.ended","debate.updated","settings.updated","reset.performed"].forEach(type => {
     source.addEventListener(type, e => onEvent(JSON.parse(e.data)));
   });
   return () => source.close();

@@ -44,6 +44,22 @@ func (api *API) SaveVoting(w http.ResponseWriter, r *http.Request) {
 	respond(w, map[string]string{"status": "ok"}, api.voting.SaveResult(r.Context(), sessionID))
 }
 
+func (api *API) SaveOpticalVoting(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		SessionID int64  `json:"sessionId"`
+		Result    string `json:"result"`
+	}
+	if err := decode(r, &req); err != nil || req.SessionID == 0 {
+		writeError(w, http.StatusBadRequest, "missing_session", "Chybí ID hlasování.")
+		return
+	}
+	if req.Result != domain.VoteFor && req.Result != domain.VoteAgainst {
+		writeError(w, http.StatusBadRequest, "invalid_result", "Optická většina musí být pro nebo proti.")
+		return
+	}
+	respond(w, map[string]string{"status": "ok"}, api.voting.SaveOpticalResult(r.Context(), req.SessionID, req.Result == domain.VoteFor))
+}
+
 func (api *API) CancelVoting(w http.ResponseWriter, r *http.Request) {
 	sessionID, ok := sessionIDFromRequest(w, r)
 	if !ok {

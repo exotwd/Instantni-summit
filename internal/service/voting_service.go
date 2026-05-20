@@ -32,6 +32,16 @@ func (s *VotingService) StartVoting(ctx context.Context, amendmentID *int64) (*d
 		if amendment == nil {
 			return nil, NewUserError("not_found", "Pozměňovací návrh nebyl nalezen.")
 		}
+		if amendment.Status != domain.AmendmentIntroduced {
+			return nil, NewUserError("amendment_not_introduced", "PN musí být nejdřív zapracovaný a představený.")
+		}
+		debate, err := repository.NewAmendmentRepository(s.db).CurrentDebate(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if debate == nil || debate.AmendmentID == nil || *debate.AmendmentID != *amendmentID || debate.Phase != domain.DebateReadyToVote {
+			return nil, NewUserError("debate_not_finished", "Před hlasováním dokonči jednání o PN: přečtení návrhu, podporovatele a odpůrce.")
+		}
 	}
 	limit, err := s.settings.GetVotingTimeLimit(ctx)
 	if err != nil {
@@ -46,6 +56,9 @@ func (s *VotingService) StartVoting(ctx context.Context, amendmentID *int64) (*d
 			return err
 		}
 		if _, err := repository.NewVotingRepository(tx).Start(ctx, amendmentID, limit, revision); err != nil {
+			return err
+		}
+		if err := repository.NewAmendmentRepository(tx).ClearDebate(ctx); err != nil {
 			return err
 		}
 		return events.Log(ctx, realtime.EventVotingUpdated, "admin", "", map[string]any{"amendmentId": amendmentID})
@@ -71,7 +84,8 @@ func (s *VotingService) CastVote(ctx context.Context, delegationID int64, choice
 		if err != nil {
 			return err
 		}
-		if session == nil || session.Status != domain.VotingOpen {
+		adminEditingClosedVote := source == domain.SourceAdmin && session != nil && session.Status == domain.VotingClosed
+		if session == nil || (session.Status != domain.VotingOpen && !adminEditingClosedVote) {
 			return NewUserError("voting_closed", "Hlasování není otevřené.")
 		}
 		events := repository.NewEventRepository(tx)
@@ -130,6 +144,22 @@ func (s *VotingService) SaveResult(ctx context.Context, sessionID int64) error {
 		if err := votes.SetStatus(ctx, sessionID, domain.VotingSaved, revision); err != nil {
 			return err
 		}
+		opticalChoice := domain.VoteAgainst
+		if passed {
+			opticalChoice = domain.VoteFor
+		}
+		delegations, err := repository.NewDelegationRepository(tx).List(ctx, false)
+		if err != nil {
+			return err
+		}
+		for _, delegation := range delegations {
+			if !delegation.Present {
+				continue
+			}
+			if err := votes.Cast(ctx, sessionID, delegation.ID, opticalChoice, domain.SourceAdmin, revision); err != nil {
+				return err
+			}
+		}
 		if session.AmendmentID != nil {
 			amendments := repository.NewAmendmentRepository(tx)
 			amendment, err := amendments.Get(ctx, *session.AmendmentID)
@@ -159,6 +189,65 @@ func (s *VotingService) SaveResult(ctx context.Context, sessionID int64) error {
 			}
 		}
 		return events.Log(ctx, realtime.EventVotingSaved, "admin", "", map[string]any{"sessionId": sessionID})
+	})
+	if err == nil {
+		state, _ := s.GetCurrentVotingState(ctx, nil, true)
+		s.hub.Publish(realtime.Event{Type: realtime.EventVotingSaved, Revision: revision, Payload: state})
+		if resolutionChanged {
+			res, _ := s.resolution.GetCurrentResolution(ctx)
+			s.hub.Publish(realtime.Event{Type: realtime.EventResolutionUpdated, Revision: res.Revision, Payload: res})
+		}
+	}
+	return err
+}
+
+func (s *VotingService) SaveOpticalResult(ctx context.Context, sessionID int64, passed bool) error {
+	var revision int64
+	var resolutionChanged bool
+	err := database.WithTx(ctx, s.db, func(tx *sql.Tx) error {
+		votes := repository.NewVotingRepository(tx)
+		session, err := votes.Get(ctx, sessionID)
+		if err != nil {
+			return err
+		}
+		if session == nil {
+			return NewUserError("not_found", "Hlasování nebylo nalezeno.")
+		}
+		if session.Status != domain.VotingOpen && session.Status != domain.VotingClosed {
+			return NewUserError("voting_not_active", "Optickou většinu lze uložit jen u aktivního nebo ukončeného hlasování.")
+		}
+		events := repository.NewEventRepository(tx)
+		revision, err = events.BumpRevision(ctx, "voting")
+		if err != nil {
+			return err
+		}
+		if err := votes.SetStatus(ctx, sessionID, domain.VotingSaved, revision); err != nil {
+			return err
+		}
+		if session.AmendmentID != nil {
+			amendments := repository.NewAmendmentRepository(tx)
+			amendment, err := amendments.Get(ctx, *session.AmendmentID)
+			if err != nil {
+				return err
+			}
+			if amendment != nil && passed {
+				if err := s.resolution.ApplyPassedAmendment(ctx, tx, *amendment); err != nil {
+					return err
+				}
+				if err := amendments.SetStatus(ctx, amendment.ID, domain.AmendmentPassed); err != nil {
+					return err
+				}
+				if _, err := events.BumpRevision(ctx, "resolution"); err != nil {
+					return err
+				}
+				resolutionChanged = true
+			} else if amendment != nil {
+				if err := amendments.SetStatus(ctx, amendment.ID, domain.AmendmentFailed); err != nil {
+					return err
+				}
+			}
+		}
+		return events.Log(ctx, realtime.EventVotingSaved, "admin", "", map[string]any{"sessionId": sessionID, "optical": true, "passed": passed})
 	})
 	if err == nil {
 		state, _ := s.GetCurrentVotingState(ctx, nil, true)

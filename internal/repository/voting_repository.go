@@ -32,7 +32,7 @@ func (r *VotingRepository) Start(ctx context.Context, amendmentID *int64, timeLi
 
 func (r *VotingRepository) Current(ctx context.Context) (*domain.VotingSession, error) {
 	row := r.db.QueryRowContext(ctx, `select id, amendment_id, status, started_at, closed_at, time_limit_sec, revision, created_at, updated_at
-		from voting_sessions where status in ('open','closed') order by id desc limit 1`)
+		from voting_sessions where status in ('open','closed','saved') order by id desc limit 1`)
 	session, err := scanVotingSession(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
@@ -64,7 +64,7 @@ func (r *VotingRepository) SetStatus(ctx context.Context, id int64, status strin
 		_, err := r.db.ExecContext(ctx, `update voting_sessions set status=?, closed_at=current_timestamp, revision=?, updated_at=current_timestamp where id=?`, status, revision, id)
 		return err
 	case domain.VotingOpen:
-		_, err := r.db.ExecContext(ctx, `update voting_sessions set status=?, closed_at=null, revision=?, updated_at=current_timestamp where id=?`, status, revision, id)
+		_, err := r.db.ExecContext(ctx, `update voting_sessions set status=?, started_at=current_timestamp, closed_at=null, revision=?, updated_at=current_timestamp where id=?`, status, revision, id)
 		return err
 	default:
 		_, err := r.db.ExecContext(ctx, `update voting_sessions set status=?, revision=?, updated_at=current_timestamp where id=?`, status, revision, id)

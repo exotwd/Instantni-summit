@@ -279,7 +279,6 @@ async function cast(choice) {
 
 function logout() {
   localStorage.removeItem("munVotingCode");
-  api("/api/auth/logout", { method: "POST" }).catch(() => {});
   state = null;
   renderLogin();
 }

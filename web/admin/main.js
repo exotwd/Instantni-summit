@@ -10,6 +10,7 @@ let speakerClickTimer = null;
 let editingDelegationId = null;
 let editingAgendaId = null;
 let draggingLayout = null;
+let manualVoteCursor = 0;
 
 const panels = [
   ["dashboard", "Přehled"],
@@ -24,6 +25,7 @@ init();
 window.addEventListener("pointermove", onLayoutDragMove);
 window.addEventListener("pointerup", onLayoutDragEnd);
 window.addEventListener("pointercancel", onLayoutDragEnd);
+window.addEventListener("keydown", onVotingHotkey);
 
 async function init() {
   try {
@@ -74,6 +76,7 @@ function normalizeState() {
   state.speakers.reactions = state.speakers.reactions || [];
   state.speakers.state = state.speakers.state || {};
   state.agenda = state.agenda || [];
+  state.debate = state.debate || {};
 }
 
 function renderLogin(message = "") {
@@ -161,6 +164,7 @@ function renderDashboardPanel() {
     </div>
     ${renderSpeakerPanel()}
     ${renderBreakPanel()}
+    ${renderDebatePanel()}
     <div class="card">
       <h2>Aktivní PN</h2>
       <div id="items">${renderAmendmentItems()}</div>
@@ -184,6 +188,7 @@ function renderAmendmentsPanel() {
     ${renderAgendaOverview()}
     ${renderSpeakerPanel()}
     ${renderBreakPanel()}
+    ${renderDebatePanel()}
     <form class="card" data-form="amendment">
       <h2>Nový pozměňovací návrh</h2>
       <div class="meta compact">
@@ -221,7 +226,7 @@ function renderSpeakerPanel() {
           <ol class="queue-list">${state.speakers.queue.length ? state.speakers.queue.map((item) => `<li data-remove-speaker="${item.id}">${flagName(item.delegation)}</li>`).join("") : "<li>Pořadník je prázdný.</li>"}</ol>
         </div>
       </div>
-      <div class="stage-wrap"><div class="stage speaker-stage">${renderSeats("speaker")}</div></div>
+      <div class="stage-wrap"><div class="stage speaker-stage">${renderChairMarker()}${renderSeats("speaker")}</div></div>
     </div>`;
 }
 
@@ -277,13 +282,40 @@ function renderBreakPanel() {
     </div>`;
 }
 
+function renderDebatePanel() {
+  const debate = state.debate || {};
+  const session = debate.session;
+  if (!session) return "";
+  return `
+    <div class="card debate-panel">
+      <h2>Jednání o PN ${debate.amendment?.number || ""}</h2>
+      <div class="meta">
+        <div><strong>Fáze</strong><br>${debatePhaseLabel(session.phase)}</div>
+        <div><strong>Předkladatel</strong><br>${debate.submitter ? flagName(debate.submitter) : (debate.amendment?.submitterName || "Předkladatel")}</div>
+        <div><strong>Podporovatel</strong><br>${debate.supporter ? flagName(debate.supporter) : "nevybrán"}</div>
+        <div><strong>Odpůrce</strong><br>${debate.opponent ? flagName(debate.opponent) : "nevybrán"}</div>
+      </div>
+      <p>${esc(debate.amendment?.text || "")}</p>
+      ${(session.phase === "select_supporter" || session.phase === "select_opponent") ? `
+        <div class="debate-select-grid">
+          ${state.delegations.filter((item) => item.present).map((delegation) => `<button class="save" data-debate-select="${delegation.id}">${flagName(delegation)}</button>`).join("")}
+        </div>` : ""}
+      <div class="actions">
+        <button class="save" data-action="debate-next">Další krok</button>
+        ${session.phase === "ready_to_vote" && debate.amendment ? `<button class="vote-button" data-start-voting="${debate.amendment.id}">Spustit hlasování</button>` : ""}
+        <button class="reject" data-action="debate-cancel">Zrušit jednání</button>
+      </div>
+    </div>`;
+}
+
 function renderAmendmentItems() {
   const active = state.amendments.filter((item) => item.status !== "passed" && item.status !== "failed");
   if (!active.length) {
     return `<div class="empty">V aktivním seznamu teď nejsou žádné PN. Odhlasované PN zůstávají uložené v databázi.</div>`;
   }
   return active.map((item) => {
-    const ready = item.status === "introduced" || item.status === "accepted";
+    const ready = item.status === "introduced";
+    const canVote = canStartVotingFor(item);
     return `
       <div class="card ${amendmentClass(item)}" id="card-${item.id}">
         <div class="meta">
@@ -296,10 +328,11 @@ function renderAmendmentItems() {
         <span class="label">Text návrhu</span>
         <div class="original">${esc(item.text)}</div>
         <div class="actions">
-          <button class="present" data-introduce="${item.id}">Označit jako představený</button>
+          ${item.status === "submitted" ? `<button class="approve" data-accept="${item.id}">Zapracovat do dokumentu</button>` : ""}
+          ${item.status === "accepted" || item.status === "introduced" ? `<button class="present" data-introduce="${item.id}">Označit jako představený</button>` : ""}
           <button class="reject" data-reject="${item.id}">Vyřadit</button>
-          <button class="save" data-debate="${item.id}">Zahájit jednání</button>
-          <button class="vote-button" data-start-voting="${item.id}" ${ready ? "" : "disabled"}>Hlasovat o PN</button>
+          <button class="save" data-debate="${item.id}" ${ready ? "" : "disabled"}>Zahájit jednání</button>
+          <button class="vote-button" data-start-voting="${item.id}" ${canVote ? "" : "disabled"}>Hlasovat o PN</button>
         </div>
       </div>`;
   }).join("");
@@ -318,7 +351,7 @@ function renderLayoutPanel() {
       </div>
       <div class="vote-summary"><strong>Prezenční listina</strong><br>Přítomno: ${present}<br>Nepřítomno: ${absent}</div>
     </div>
-    <div class="stage-wrap"><div class="stage">${renderSeats("layout")}</div></div>
+    <div class="stage-wrap"><div class="stage">${renderChairMarker()}${renderSeats("layout")}</div></div>
     <div class="card">
       <h2>Prezenční listina a přístupové kódy</h2>
       ${renderAttendanceTable()}
@@ -327,23 +360,27 @@ function renderLayoutPanel() {
 
 function renderVotingPanel() {
   const session = state.voting.session;
+  const secretMode = isSecretVotingMode();
   return `
     <div class="card voting-current">
       <h2>Hlasování o PN</h2>
       ${session ? renderSessionInfo(session) : `<div class="empty">Není spuštěné žádné hlasování.</div>`}
+      <div class="voting-status"><strong>Režim:</strong> ${secretMode ? "jednoduché / tajné hlasování" : "veřejné hlasování se schématem"}<br>Klávesy předsedajícího: Q = pro, P = proti, mezerník = zdržuje se. Hlas se zapíše další přítomné delegaci v pořadí.</div>
       <div class="vote-summary">${renderVoteSummary()}</div>
       <div class="actions">
         <button class="approve" data-vote-action="close" ${session?.status === "open" ? "" : "disabled"}>Ukončit hlasování</button>
         <button class="save" data-vote-action="reopen" ${session?.status === "closed" ? "" : "disabled"}>Obnovit hlasování</button>
         <button class="approve" data-vote-action="save" ${session?.status === "closed" ? "" : "disabled"}>Uložit výsledek</button>
+        <button class="present" data-optical="for" ${session ? "" : "disabled"}>Optická většina PRO</button>
+        <button class="reject" data-optical="against" ${session ? "" : "disabled"}>Optická většina PROTI</button>
         <button class="reject" data-vote-action="cancel" ${session ? "" : "disabled"}>Zrušit hlasování</button>
         <button class="save" data-action="force-projection">Vynutit aktualizaci projekce</button>
       </div>
     </div>
-    <div class="stage-wrap"><div class="stage">${renderSeats("voting")}</div></div>
+    <div class="stage-wrap"><div class="stage">${renderChairMarker()}${renderSeats("voting")}</div></div>
     <div class="card">
       <h2>Spustit hlasování o PN</h2>
-      ${state.amendments.length ? state.amendments.map((item) => `<div class="item"><b>PN ${item.number}</b> <span class="badge">${statusLabel(item.status)}</span><p>${esc(item.text)}</p><button class="vote-button" data-start-voting="${item.id}">Hlasovat</button></div>`).join("") : `<div class="empty">Zatím nejsou žádné PN.</div>`}
+      ${state.amendments.length ? state.amendments.map((item) => `<div class="item"><b>PN ${item.number}</b> <span class="badge">${statusLabel(item.status)}</span><p>${esc(item.text)}</p><button class="vote-button" data-start-voting="${item.id}" ${canStartVotingFor(item) ? "" : "disabled"}>Hlasovat</button></div>`).join("") : `<div class="empty">Zatím nejsou žádné PN.</div>`}
     </div>`;
 }
 
@@ -417,6 +454,7 @@ function renderAgendaPanelV2() {
 
 function renderSettingsPanel() {
   const values = state.settings.values || {};
+  const votingMode = values.voting_mode || "public";
   return `
     <form class="card" data-form="settings">
       <h2>Nastavení administrátora</h2>
@@ -424,6 +462,7 @@ function renderSettingsPanel() {
         <div><strong>Název summitu</strong><input name="conference_name" value="${esc(values.conference_name || "")}"></div>
         <div><strong>Výbor</strong><input name="committee_name" value="${esc(values.committee_name || "")}"></div>
         <div><strong>Čas hlasování v sekundách</strong><input name="default_voting_time_sec" type="number" min="1" value="${esc(values.default_voting_time_sec || "60")}"></div>
+        <div><strong>Režim hlasování</strong><select name="voting_mode">${option("public", "Veřejné se schématem", votingMode)}${option("secret", "Jednoduché / tajné bez schématu", votingMode)}</select></div>
       </div>
       <div class="actions"><button class="approve">Uložit nastavení</button></div>
     </form>
@@ -548,6 +587,24 @@ function renderSeats(mode) {
   }).join("");
 }
 
+function renderChairMarker() {
+  return `
+    <div class="chair-marker" aria-label="Předsedající">
+      <div class="chair-label">PŘEDSEDNICTVO</div>
+      <div class="chair-desk">CHAIR</div>
+    </div>`;
+}
+
+function isSecretVotingMode() {
+  return (state?.settings?.values?.voting_mode || "public") === "secret";
+}
+
+function canStartVotingFor(item) {
+  return item?.status === "introduced" &&
+    state?.debate?.session?.phase === "ready_to_vote" &&
+    Number(state?.debate?.amendment?.id || 0) === Number(item.id || 0);
+}
+
 function bindActions() {
   app.querySelectorAll("[data-panel]").forEach((button) => {
     button.onclick = () => { panel = button.dataset.panel; render(); };
@@ -590,17 +647,24 @@ function bindActions() {
   });
   click("end-break", () => post("/api/breaks/end", {}));
 
+  app.querySelectorAll("[data-accept]").forEach((button) => button.onclick = () => post(`/api/amendments/${button.dataset.accept}/accept`, {}, "PN zapracován do dokumentu."));
   app.querySelectorAll("[data-introduce]").forEach((button) => button.onclick = () => post(`/api/amendments/${button.dataset.introduce}/introduce`, {}));
   app.querySelectorAll("[data-reject]").forEach((button) => button.onclick = () => post(`/api/amendments/${button.dataset.reject}/reject`, {}));
   app.querySelectorAll("[data-debate]").forEach((button) => button.onclick = () => post(`/api/amendments/${button.dataset.debate}/debate`, {}));
   app.querySelectorAll("[data-start-voting]").forEach((button) => button.onclick = () => post("/api/admin/voting/start", { amendmentId: Number(button.dataset.startVoting) }, "Hlasování spuštěno."));
+  app.querySelectorAll("[data-debate-select]").forEach((button) => button.onclick = () => post("/api/debate/select", { delegationId: Number(button.dataset.debateSelect) }, "Výběr uložen."));
+  click("debate-next", () => post("/api/debate/next", {}, "Jednání posunuto."));
+  click("debate-cancel", () => post("/api/debate/cancel", {}, "Jednání zrušeno."));
 
   app.querySelectorAll("[data-vote-action]").forEach((button) => {
     button.onclick = () => post(`/api/admin/voting/${button.dataset.voteAction}`, { sessionId: state.voting.session?.id });
   });
+  app.querySelectorAll("[data-optical]").forEach((button) => {
+    button.onclick = () => post("/api/admin/voting/optical", { sessionId: state.voting.session?.id, result: button.dataset.optical }, "Optická většina uložena.");
+  });
   app.querySelectorAll("[data-vote-seat]").forEach((seat) => {
     seat.onclick = () => {
-      if (state.voting.session?.status !== "open") return showToast("Hlasování není otevřené.");
+      if (!["open", "closed"].includes(state.voting.session?.status)) return showToast("Hlasování není aktivní.");
       const id = Number(seat.dataset.voteSeat);
       const next = nextVote(voteForDelegation(id));
       post("/api/admin/voting/cast", { delegationId: id, choice: next }, "Hlas uložen.");
@@ -689,7 +753,8 @@ async function submitSettings(event) {
   await post("/api/settings", {
     conference_name: form.conference_name.value,
     committee_name: form.committee_name.value,
-    default_voting_time_sec: String(form.default_voting_time_sec.value || "60")
+    default_voting_time_sec: String(form.default_voting_time_sec.value || "60"),
+    voting_mode: form.voting_mode.value
   });
 }
 
@@ -852,22 +917,28 @@ async function arrangeSeats(kind) {
     let seat;
     if (kind === "circle") {
       const angle = (2 * Math.PI * index / count) - Math.PI / 2;
-      seat = { x: 50 + Math.cos(angle) * 38 - 5.5, y: 48 + Math.sin(angle) * 35 - 4.5, w: 11, h: 9, rotation: Math.round(angle * 180 / Math.PI + 90) };
+      const seatW = clamp(230 / Math.max(count, 1), 7, 10.4);
+      const seatH = clamp(seatW * 0.64, 4.6, 6.8);
+      seat = { x: 50 + Math.cos(angle) * 39 - seatW / 2, y: 51 + Math.sin(angle) * 35 - seatH / 2, w: seatW, h: seatH, rotation: Math.round(angle * 180 / Math.PI + 90) };
     } else if (kind === "u") {
-      const leftCount = Math.ceil(count * .34);
-      const rightCount = Math.ceil(count * .34);
+      const leftCount = Math.ceil(count * 0.34);
+      const rightCount = Math.ceil(count * 0.34);
       const topCount = Math.max(0, count - leftCount - rightCount);
+      const topStep = 68 / Math.max(topCount - 1, 1);
+      const sideStep = 66 / Math.max(Math.max(leftCount, rightCount) - 1, 1);
+      const seatW = clamp(Math.min(topStep * 0.72, sideStep * 1.1), 7, 10);
+      const seatH = clamp(Math.min(sideStep * 0.72, seatW * 0.64), 4.6, 6.8);
       if (index < leftCount) {
         const ratio = leftCount === 1 ? 0 : index / (leftCount - 1);
-        seat = { x: 7, y: 18 + ratio * 66, w: 11, h: 8, rotation: 90 };
+        seat = { x: 7, y: 20 + ratio * 66, w: seatW, h: seatH, rotation: 90 };
       } else if (index < leftCount + topCount) {
         const topIndex = index - leftCount;
         const ratio = topCount <= 1 ? .5 : topIndex / (topCount - 1);
-        seat = { x: 17 + ratio * 66, y: 7, w: 11, h: 8, rotation: 0 };
+        seat = { x: 16 + ratio * 68, y: 9, w: seatW, h: seatH, rotation: 0 };
       } else {
         const rightIndex = index - leftCount - topCount;
         const ratio = rightCount === 1 ? 0 : rightIndex / (rightCount - 1);
-        seat = { x: 82, y: 18 + ratio * 66, w: 11, h: 8, rotation: -90 };
+        seat = { x: 93 - seatW, y: 20 + ratio * 66, w: seatW, h: seatH, rotation: -90 };
       }
     } else {
       seat = defaultSeat(index);
@@ -943,8 +1014,8 @@ function resolutionOptions() {
   return (state.resolution.points || []).map((point) => `<option value="${point.id}">${point.number}. ${esc(shorten(point.text, 90))}</option>`).join("");
 }
 
-function option(value, label) {
-  return `<option value="${value}">${label}</option>`;
+function option(value, label, selected) {
+  return `<option value="${value}" ${selected === value ? "selected" : ""}>${label}</option>`;
 }
 
 function agendaTypeOptions(selected) {
@@ -1000,6 +1071,25 @@ function nextVote(current) {
   return "for";
 }
 
+function onVotingHotkey(event) {
+  if (panel !== "voting" || !state?.voting?.session) return;
+  if (!["open", "closed"].includes(state.voting.session.status)) return;
+  if (event.target && ["INPUT", "TEXTAREA", "SELECT"].includes(event.target.tagName)) return;
+
+  let choice = "";
+  if (event.key.toLowerCase() === "q") choice = "for";
+  if (event.key.toLowerCase() === "p") choice = "against";
+  if (event.code === "Space") choice = "abstain";
+  if (!choice) return;
+
+  const presentDelegations = state.delegations.filter((delegation) => delegation.present);
+  if (!presentDelegations.length) return;
+  event.preventDefault();
+  const delegation = presentDelegations[manualVoteCursor % presentDelegations.length];
+  manualVoteCursor++;
+  post("/api/admin/voting/cast", { delegationId: delegation.id, choice }, `${flagName(delegation)}: ${voteLabel(choice)}`);
+}
+
 function voteLabel(value) {
   if (value === "for") return "PRO";
   if (value === "against") return "PROTI";
@@ -1019,6 +1109,17 @@ function statusLabel(value) {
     closed: "Ukončeno",
     saved: "Uloženo",
     cancelled: "Zrušeno"
+  })[value] || value || "";
+}
+
+function debatePhaseLabel(value) {
+  return ({
+    submitter_reading: "Předkladatel čte návrh",
+    select_supporter: "Výběr podporovatele",
+    select_opponent: "Výběr odpůrce",
+    supporter_speaking: "Mluví podporovatel",
+    opponent_speaking: "Mluví odpůrce",
+    ready_to_vote: "Připraveno k hlasování"
   })[value] || value || "";
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"html"
+	"strconv"
 	"strings"
 
 	"mun-app/internal/database"
@@ -26,14 +27,18 @@ func (s *ResolutionService) GetCurrentResolution(ctx context.Context) (domain.Re
 	if err != nil {
 		return domain.ResolutionSnapshot{}, err
 	}
+	amendments, err := repository.NewAmendmentRepository(s.db).List(ctx)
+	if err != nil {
+		return domain.ResolutionSnapshot{}, err
+	}
 	revision, err := repository.NewEventRepository(s.db).Revision(ctx, "resolution")
 	if err != nil {
 		return domain.ResolutionSnapshot{}, err
 	}
-	return domain.ResolutionSnapshot{Revision: revision, Points: points, HTML: RenderResolutionHTML(points)}, nil
+	return domain.ResolutionSnapshot{Revision: revision, Points: points, HTML: RenderResolutionHTML(points, amendments)}, nil
 }
 
-func RenderResolutionHTML(points []domain.ResolutionPoint) string {
+func RenderResolutionHTML(points []domain.ResolutionPoint, amendments []domain.Amendment) string {
 	var b strings.Builder
 	b.WriteString("<ol>")
 	for _, point := range points {
@@ -41,8 +46,37 @@ func RenderResolutionHTML(points []domain.ResolutionPoint) string {
 		b.WriteString(html.EscapeString(point.Text))
 		b.WriteString("</li>")
 	}
+	for _, amendment := range amendments {
+		if amendment.Status != domain.AmendmentAccepted && amendment.Status != domain.AmendmentIntroduced {
+			continue
+		}
+		className := "accepted"
+		if amendment.Status == domain.AmendmentIntroduced {
+			className = "introduced"
+		}
+		b.WriteString(`<li class="resolution-pending `)
+		b.WriteString(className)
+		b.WriteString(`">`)
+		b.WriteString(html.EscapeString(amendmentWorkingText(amendment)))
+		b.WriteString("</li>")
+	}
 	b.WriteString("</ol>")
 	return b.String()
+}
+
+func amendmentWorkingText(amendment domain.Amendment) string {
+	text := strings.TrimSpace(amendment.Text)
+	switch amendment.Type {
+	case domain.AmendmentUpdate:
+		return "PN " + strconv.Itoa(amendment.Number) + " - upravit bod: " + text
+	case domain.AmendmentRemove:
+		return "PN " + strconv.Itoa(amendment.Number) + " - odstranit bod"
+	default:
+		if text == "" {
+			return "PN " + strconv.Itoa(amendment.Number)
+		}
+		return text + " (PN " + strconv.Itoa(amendment.Number) + ")"
+	}
 }
 
 func (s *ResolutionService) AddPoint(ctx context.Context, text string) error {

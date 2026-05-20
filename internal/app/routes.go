@@ -35,6 +35,7 @@ func (a *App) routes() {
 	a.mux.HandleFunc("POST /api/admin/voting/close", api.RequireAdmin(api.CloseVoting))
 	a.mux.HandleFunc("POST /api/admin/voting/reopen", api.RequireAdmin(api.ReopenVoting))
 	a.mux.HandleFunc("POST /api/admin/voting/save", api.RequireAdmin(api.SaveVoting))
+	a.mux.HandleFunc("POST /api/admin/voting/optical", api.RequireAdmin(api.SaveOpticalVoting))
 	a.mux.HandleFunc("POST /api/admin/voting/cancel", api.RequireAdmin(api.CancelVoting))
 	a.mux.HandleFunc("POST /api/admin/voting/force-projection", api.RequireAdmin(api.ForceProjection))
 
@@ -56,9 +57,13 @@ func (a *App) routes() {
 	a.mux.HandleFunc("GET /api/amendments", api.RequireAdmin(api.ListAmendments))
 	a.mux.HandleFunc("POST /api/amendments", api.RequireAdmin(api.CreateAmendment))
 	a.mux.HandleFunc("PUT /api/amendments/{id}", api.RequireAdmin(api.UpdateAmendment))
+	a.mux.HandleFunc("POST /api/amendments/{id}/accept", api.RequireAdmin(api.AcceptAmendment))
 	a.mux.HandleFunc("POST /api/amendments/{id}/introduce", api.RequireAdmin(api.IntroduceAmendment))
 	a.mux.HandleFunc("POST /api/amendments/{id}/reject", api.RequireAdmin(api.RejectAmendment))
 	a.mux.HandleFunc("POST /api/amendments/{id}/debate", api.RequireAdmin(api.StartDebate))
+	a.mux.HandleFunc("POST /api/debate/select", api.RequireAdmin(api.SelectDebateDelegation))
+	a.mux.HandleFunc("POST /api/debate/next", api.RequireAdmin(api.AdvanceDebate))
+	a.mux.HandleFunc("POST /api/debate/cancel", api.RequireAdmin(api.CancelDebate))
 	a.mux.HandleFunc("GET /api/resolution", api.RequireAdmin(api.Resolution))
 
 	a.mux.HandleFunc("PUT /api/delegations/{id}", api.RequireAdmin(api.UpdateDelegation))

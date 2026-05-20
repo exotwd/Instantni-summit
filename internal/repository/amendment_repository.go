@@ -90,11 +90,48 @@ func (r *AmendmentRepository) NextNumber(ctx context.Context) (int, error) {
 func (r *AmendmentRepository) StartDebate(ctx context.Context, amendment domain.Amendment, revision int64) (int64, error) {
 	_, _ = r.db.ExecContext(ctx, `delete from debate_sessions`)
 	res, err := r.db.ExecContext(ctx, `insert into debate_sessions(amendment_id, submitter_delegation_id, phase, phase_started_at, revision)
-		values(?,?,?,?,?)`, amendment.ID, amendment.SubmitterDelegationID, "submitter_reading", time.Now().UTC(), revision)
+		values(?,?,?,?,?)`, amendment.ID, amendment.SubmitterDelegationID, domain.DebateSubmitterReading, time.Now().UTC(), revision)
 	if err != nil {
 		return 0, err
 	}
 	return res.LastInsertId()
+}
+
+func (r *AmendmentRepository) CurrentDebate(ctx context.Context) (*domain.DebateSession, error) {
+	row := r.db.QueryRowContext(ctx, `select id, amendment_id, submitter_delegation_id, supporter_delegation_id, opponent_delegation_id, phase, phase_started_at, revision, created_at, updated_at
+		from debate_sessions order by id desc limit 1`)
+	session, err := scanDebateSession(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &session, nil
+}
+
+func (r *AmendmentRepository) UpdateDebate(ctx context.Context, session domain.DebateSession, revision int64) error {
+	_, err := r.db.ExecContext(ctx, `update debate_sessions set supporter_delegation_id=?, opponent_delegation_id=?, phase=?, phase_started_at=?, revision=?, updated_at=current_timestamp where id=?`,
+		session.SupporterDelegationID, session.OpponentDelegationID, session.Phase, time.Now().UTC(), revision, session.ID)
+	return err
+}
+
+func (r *AmendmentRepository) ClearDebate(ctx context.Context) error {
+	_, err := r.db.ExecContext(ctx, `delete from debate_sessions`)
+	return err
+}
+
+func scanDebateSession(row interface{ Scan(dest ...any) error }) (domain.DebateSession, error) {
+	var session domain.DebateSession
+	var amendment, submitter, supporter, opponent sql.NullInt64
+	var phaseStarted sql.NullTime
+	err := row.Scan(&session.ID, &amendment, &submitter, &supporter, &opponent, &session.Phase, &phaseStarted, &session.Revision, &session.CreatedAt, &session.UpdatedAt)
+	session.AmendmentID = nullInt64Ptr(amendment)
+	session.SubmitterDelegationID = nullInt64Ptr(submitter)
+	session.SupporterDelegationID = nullInt64Ptr(supporter)
+	session.OpponentDelegationID = nullInt64Ptr(opponent)
+	session.PhaseStartedAt = nullTimePtr(phaseStarted)
+	return session, err
 }
 
 func scanAmendment(row interface{ Scan(dest ...any) error }) (domain.Amendment, error) {

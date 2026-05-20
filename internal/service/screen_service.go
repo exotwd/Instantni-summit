@@ -18,6 +18,7 @@ type AdminState struct {
 	Speakers    domain.SpeakerSnapshot    `json:"speakers"`
 	Break       *domain.Break             `json:"break,omitempty"`
 	Agenda      []domain.AgendaItem       `json:"agenda"`
+	Debate      domain.DebateState        `json:"debate"`
 }
 
 type ScreenState struct {
@@ -27,6 +28,7 @@ type ScreenState struct {
 	Voting      domain.VotingState          `json:"voting"`
 	Speakers    domain.SpeakerSnapshot      `json:"speakers"`
 	Break       *domain.Break               `json:"break,omitempty"`
+	Debate      domain.DebateState          `json:"debate"`
 }
 
 type VoteState struct {
@@ -84,7 +86,11 @@ func (s *ScreenService) AdminState(ctx context.Context) (AdminState, error) {
 	if err != nil {
 		return AdminState{}, err
 	}
-	return AdminState{Settings: settings, Attendance: attendance, Delegations: attendance.Delegations, Resolution: resolution, Amendments: amendments, Voting: voting, Speakers: speakers, Break: activeBreak, Agenda: agenda}, nil
+	debate, err := s.amendments.DebateState(ctx)
+	if err != nil {
+		return AdminState{}, err
+	}
+	return AdminState{Settings: settings, Attendance: attendance, Delegations: attendance.Delegations, Resolution: resolution, Amendments: amendments, Voting: voting, Speakers: speakers, Break: activeBreak, Agenda: agenda, Debate: debate}, nil
 }
 
 func (s *ScreenService) ScreenState(ctx context.Context) (ScreenState, error) {
@@ -116,7 +122,11 @@ func (s *ScreenService) ScreenState(ctx context.Context) (ScreenState, error) {
 	if err != nil {
 		return ScreenState{}, err
 	}
-	return ScreenState{Settings: settings, Delegations: public, Resolution: resolution, Voting: voting, Speakers: speakers, Break: activeBreak}, nil
+	debate, err := s.amendments.DebateState(ctx)
+	if err != nil {
+		return ScreenState{}, err
+	}
+	return ScreenState{Settings: settings, Delegations: public, Resolution: resolution, Voting: voting, Speakers: speakers, Break: activeBreak, Debate: debate}, nil
 }
 
 func (s *ScreenService) VoteState(ctx context.Context, delegationID int64) (VoteState, error) {

@@ -24,6 +24,26 @@ func (s *AmendmentService) List(ctx context.Context) ([]domain.Amendment, error)
 	return repository.NewAmendmentRepository(s.db).List(ctx)
 }
 
+func (s *AmendmentService) DebateState(ctx context.Context) (domain.DebateState, error) {
+	repo := repository.NewAmendmentRepository(s.db)
+	session, err := repo.CurrentDebate(ctx)
+	if err != nil {
+		return domain.DebateState{}, err
+	}
+	if session == nil {
+		return domain.DebateState{}, nil
+	}
+	state := domain.DebateState{Session: session}
+	if session.AmendmentID != nil {
+		state.Amendment, _ = repo.Get(ctx, *session.AmendmentID)
+	}
+	delegations := repository.NewDelegationRepository(s.db)
+	state.Submitter = publicDelegationPtr(ctx, delegations, session.SubmitterDelegationID)
+	state.Supporter = publicDelegationPtr(ctx, delegations, session.SupporterDelegationID)
+	state.Opponent = publicDelegationPtr(ctx, delegations, session.OpponentDelegationID)
+	return state, nil
+}
+
 func (s *AmendmentService) Create(ctx context.Context, amendment domain.Amendment) (*domain.Amendment, error) {
 	return s.create(ctx, amendment, "admin")
 }
@@ -92,6 +112,10 @@ func (s *AmendmentService) Introduce(ctx context.Context, id int64) error {
 	return s.setStatus(ctx, id, domain.AmendmentIntroduced)
 }
 
+func (s *AmendmentService) Accept(ctx context.Context, id int64) error {
+	return s.setStatus(ctx, id, domain.AmendmentAccepted)
+}
+
 func (s *AmendmentService) Reject(ctx context.Context, id int64) error {
 	return s.setStatus(ctx, id, domain.AmendmentRejected)
 }
@@ -127,6 +151,9 @@ func (s *AmendmentService) StartDebate(ctx context.Context, id int64) error {
 		if amendment == nil {
 			return NewUserError("not_found", "Pozměňovací návrh nebyl nalezen.")
 		}
+		if amendment.Status != domain.AmendmentIntroduced {
+			return NewUserError("amendment_not_introduced", "PN musí být nejdřív zapracovaný a představený.")
+		}
 		events := repository.NewEventRepository(tx)
 		revision, err = events.BumpRevision(ctx, "debate")
 		if err != nil {
@@ -141,6 +168,132 @@ func (s *AmendmentService) StartDebate(ctx context.Context, id int64) error {
 		s.hub.Publish(realtime.Event{Type: realtime.EventDebateUpdated, Revision: revision, Payload: map[string]any{"amendmentId": id}})
 	}
 	return err
+}
+
+func (s *AmendmentService) SelectDebateDelegation(ctx context.Context, delegationID int64) error {
+	return s.updateDebate(ctx, func(session *domain.DebateSession) error {
+		switch session.Phase {
+		case domain.DebateSelectSupporter:
+			session.SupporterDelegationID = &delegationID
+			session.Phase = domain.DebateSelectOpponent
+		case domain.DebateSelectOpponent:
+			if session.SupporterDelegationID != nil && *session.SupporterDelegationID == delegationID {
+				return NewUserError("same_delegation", "Podporovatel a odpůrce nesmí být stejná delegace.")
+			}
+			session.OpponentDelegationID = &delegationID
+			session.Phase = domain.DebateSupporterSpeaking
+			if session.SupporterDelegationID == nil {
+				session.Phase = domain.DebateOpponentSpeaking
+			}
+		default:
+			return NewUserError("debate_not_selecting", "Teď se nevybírá delegace do jednání.")
+		}
+		return nil
+	})
+}
+
+func (s *AmendmentService) AdvanceDebate(ctx context.Context) error {
+	return s.updateDebate(ctx, func(session *domain.DebateSession) error {
+		switch session.Phase {
+		case domain.DebateSubmitterReading:
+			session.Phase = domain.DebateSelectSupporter
+		case domain.DebateSelectSupporter:
+			if session.SupporterDelegationID == nil {
+				return NewUserError("missing_supporter", "Nejdřív vyber podporovatele návrhu.")
+			}
+			session.Phase = domain.DebateSelectOpponent
+		case domain.DebateSelectOpponent:
+			if session.OpponentDelegationID == nil {
+				return NewUserError("missing_opponent", "Nejdřív vyber odpůrce návrhu.")
+			}
+			if session.OpponentDelegationID != nil {
+				session.Phase = domain.DebateSupporterSpeaking
+				if session.SupporterDelegationID == nil {
+					session.Phase = domain.DebateOpponentSpeaking
+				}
+			} else if session.SupporterDelegationID != nil {
+				session.Phase = domain.DebateSupporterSpeaking
+			} else {
+				session.Phase = domain.DebateReadyToVote
+			}
+		case domain.DebateSupporterSpeaking:
+			if session.OpponentDelegationID != nil {
+				session.Phase = domain.DebateOpponentSpeaking
+			} else {
+				session.Phase = domain.DebateReadyToVote
+			}
+		case domain.DebateOpponentSpeaking:
+			session.Phase = domain.DebateReadyToVote
+		case domain.DebateReadyToVote:
+			return nil
+		default:
+			session.Phase = domain.DebateSubmitterReading
+		}
+		return nil
+	})
+}
+
+func (s *AmendmentService) CancelDebate(ctx context.Context) error {
+	var revision int64
+	err := database.WithTx(ctx, s.db, func(tx *sql.Tx) error {
+		if err := repository.NewAmendmentRepository(tx).ClearDebate(ctx); err != nil {
+			return err
+		}
+		events := repository.NewEventRepository(tx)
+		var err error
+		revision, err = events.BumpRevision(ctx, "debate")
+		if err != nil {
+			return err
+		}
+		return events.Log(ctx, realtime.EventDebateUpdated, "admin", "", map[string]string{"status": "cancelled"})
+	})
+	if err == nil {
+		s.hub.Publish(realtime.Event{Type: realtime.EventDebateUpdated, Revision: revision, Payload: map[string]string{"status": "cancelled"}})
+	}
+	return err
+}
+
+func (s *AmendmentService) updateDebate(ctx context.Context, mutate func(*domain.DebateSession) error) error {
+	var revision int64
+	err := database.WithTx(ctx, s.db, func(tx *sql.Tx) error {
+		repo := repository.NewAmendmentRepository(tx)
+		session, err := repo.CurrentDebate(ctx)
+		if err != nil {
+			return err
+		}
+		if session == nil {
+			return NewUserError("not_found", "Právě neběží žádné jednání o PN.")
+		}
+		if err := mutate(session); err != nil {
+			return err
+		}
+		events := repository.NewEventRepository(tx)
+		revision, err = events.BumpRevision(ctx, "debate")
+		if err != nil {
+			return err
+		}
+		if err := repo.UpdateDebate(ctx, *session, revision); err != nil {
+			return err
+		}
+		return events.Log(ctx, realtime.EventDebateUpdated, "admin", "", map[string]any{"sessionId": session.ID, "phase": session.Phase})
+	})
+	if err == nil {
+		state, _ := s.DebateState(ctx)
+		s.hub.Publish(realtime.Event{Type: realtime.EventDebateUpdated, Revision: revision, Payload: state})
+	}
+	return err
+}
+
+func publicDelegationPtr(ctx context.Context, repo *repository.DelegationRepository, id *int64) *domain.PublicDelegation {
+	if id == nil {
+		return nil
+	}
+	delegation, err := repo.Get(ctx, *id, false)
+	if err != nil || delegation == nil {
+		return nil
+	}
+	public := delegation.Public()
+	return &public
 }
 
 func (s *AmendmentService) validate(ctx context.Context, amendment domain.Amendment) error {

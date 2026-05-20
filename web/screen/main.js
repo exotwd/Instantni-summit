@@ -13,8 +13,6 @@ window.setInterval(() => {
 
 async function init() {
   try {
-    const me = await api("/api/auth/me");
-    if (me.role !== "screen") throw new Error("screen_login_required");
     await load();
     connectRealtime();
   } catch {
@@ -56,6 +54,7 @@ function normalizeState() {
   state.speakers.queue = state.speakers.queue || [];
   state.speakers.reactions = state.speakers.reactions || [];
   state.speakers.state = state.speakers.state || {};
+  state.debate = state.debate || {};
 }
 
 function renderLogin(message = "") {
@@ -112,6 +111,7 @@ function render() {
         <ol class="speaker-queue">${renderSpeakerQueue()}</ol>
       </div>
     </div>
+    ${renderDebateOverlay()}
     ${renderVotingOverlay()}
     ${renderBreakOverlay()}
     <button class="admin-button" data-open-admin>Řízení schůze</button>`;
@@ -190,13 +190,44 @@ function renderSpeakerQueue() {
   return state.speakers.queue.map((item) => `<li>${esc(item.delegation.flag || "")} ${esc(item.delegation.code || "")} ${esc(item.delegation.name || "")}</li>`).join("");
 }
 
+function renderDebateOverlay() {
+  const debate = state.debate || {};
+  const session = debate.session;
+  if (!session) return "";
+  return `
+    <div class="debate-overlay visible">
+      <div class="debate-header">
+        <div class="debate-title">Jednání o PN ${debate.amendment?.number || ""}</div>
+        <div class="debate-subtitle">${esc(shorten(debate.amendment?.text || "", 220))}</div>
+      </div>
+      <div class="debate-phase">${debatePhaseLabel(session.phase)}</div>
+      <div class="debate-columns">
+        ${renderDebatePerson("Předkladatel", debate.submitter, session.phase === "submitter_reading", debate.amendment?.submitterName || "Předkladatel", session.phaseStartedAt)}
+        ${renderDebatePerson("Podporovatel", debate.supporter, session.phase === "supporter_speaking", "Čeká na výběr", session.phaseStartedAt)}
+        ${renderDebatePerson("Odpůrce", debate.opponent, session.phase === "opponent_speaking", "Čeká na výběr", session.phaseStartedAt)}
+      </div>
+    </div>`;
+}
+
+function renderDebatePerson(role, delegation, active, fallback, startedAt) {
+  return `
+    <div class="debate-person ${active ? "active" : ""}">
+      <div class="debate-role">${esc(role)}</div>
+      <div class="debate-flag">${esc(delegation?.flag || "–")}</div>
+      <div class="debate-code">${esc(delegation?.code || "")}</div>
+      <div class="debate-name">${esc(delegation?.name || fallback)}</div>
+      ${active ? `<div class="debate-time">${formatRunningTime(startedAt)}</div>` : ""}
+    </div>`;
+}
+
 function renderVotingOverlay() {
   const voting = state.voting || {};
   const session = voting.session;
-  if (!session) return "";
+  if (!session || state.debate?.session) return "";
   const amendment = voting.amendment;
   const counts = voting.counts || {};
   const isResult = session.status === "saved" || session.status === "closed";
+  const secretMode = (state.settings.values.voting_mode || "public") === "secret";
   return `
     <div id="voteOverlay" class="overlay visible">
       <div class="overlay-header">
@@ -211,7 +242,13 @@ function renderVotingOverlay() {
           ZDRŽUJE SE: ${counts.abstain || 0}
         </div>
       </div>
-      <div class="overlay-stage">${renderSeatMap("vote", true)}</div>
+      ${secretMode
+        ? `<div class="secret-vote-board">
+            <div class="secret-count for">PRO<br><strong>${counts.for || 0}</strong></div>
+            <div class="secret-count against">PROTI<br><strong>${counts.against || 0}</strong></div>
+            <div class="secret-count abstain">ZDRŽUJE SE<br><strong>${counts.abstain || 0}</strong></div>
+          </div>`
+        : `<div class="overlay-stage">${renderSeatMap("vote", true)}</div>`}
     </div>`;
 }
 
@@ -233,7 +270,7 @@ function renderBreakOverlay() {
 
 function renderSeatMap(mode, large) {
   const votes = new Map((state.voting.votes || []).map((vote) => [vote.delegationId, vote.choice]));
-  return state.delegations.map((delegation, index) => {
+  return renderChairMarker() + state.delegations.map((delegation, index) => {
     const seat = projectionSeat(delegation.seat || defaultSeat(index), large);
     const classes = ["seat"];
     if (mode === "vote") {
@@ -245,6 +282,10 @@ function renderSeatMap(mode, large) {
     }
     return `<div class="${classes.join(" ")}" style="left:${seat.x}%;top:${seat.y}%;width:${seat.w}%;height:${seat.h}%;" title="${esc(delegation.name)}"><div class="seat-flag-map">${esc(delegation.flag || delegation.code || "")}</div></div>`;
   }).join("");
+}
+
+function renderChairMarker() {
+  return `<div class="chair-marker"><div class="chair-label">PŘEDSEDNICTVO</div><div class="chair-desk">CHAIR</div></div>`;
 }
 
 function projectionSeat(seat, large) {
@@ -299,6 +340,17 @@ function formatSeconds(total) {
   const minutes = Math.floor(total / 60);
   const seconds = total % 60;
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+function debatePhaseLabel(value) {
+  return ({
+    submitter_reading: "Prostor předkladateli k přečtení návrhu",
+    select_supporter: "Předsedající vybírá podporovatele",
+    select_opponent: "Předsedající vybírá odpůrce",
+    supporter_speaking: "Mluví podporovatel návrhu",
+    opponent_speaking: "Mluví odpůrce návrhu",
+    ready_to_vote: "Jednání skončilo, připravuje se hlasování"
+  })[value] || value || "";
 }
 
 function shorten(text, max) {
