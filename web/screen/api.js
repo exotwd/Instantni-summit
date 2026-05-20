@@ -9,6 +9,9 @@ export async function api(path, options = {}) {
       data = JSON.parse(text);
     } catch {
       const preview = text.replace(/\s+/g, " ").slice(0, 180);
+      if (res.status === 404) {
+        throw new Error("Server běží se starým backendem nebo nezná tuto API routu. Znovu sestavte binárku a restartujte mun-app.");
+      }
       throw new Error(`Server nevrátil JSON odpověď (${res.status}). ${preview || "Prázdná odpověď."}`);
     }
   }

@@ -93,7 +93,7 @@ function render() {
   app.innerHTML = `
     <div class="screen">
       <div class="panel left">
-        <div class="clock">${new Date().toLocaleTimeString("cs-CZ", { hour: "2-digit", minute: "2-digit" })}</div>
+        <div class="clock">${new Date().toLocaleTimeString("cs-CZ", { hour: "2-digit", minute: "2-digit", hour12: false })}</div>
         <div class="connection ${connected ? "online" : "offline"}">${connected ? "online" : "offline"}</div>
         <div class="section-title">Rozložení států</div>
         <div id="miniStage" class="mini-stage">${renderSeatMap("attendance", false)}</div>

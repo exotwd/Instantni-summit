@@ -152,21 +152,19 @@ function renderDashboardPanel() {
   const present = state.delegations.filter((item) => item.present).length;
   const session = state.voting.session;
   return `
-    <div class="dashboard-grid">
-      <div class="card">
-        <h2>Přehled jednání</h2>
-        <div class="meta">
-          <div><strong>Prezence</strong><br>${present}/${state.delegations.length} přítomno</div>
-          <div><strong>Aktuální řečník</strong><br>${state.speakers.currentSpeaker ? flagName(state.speakers.currentSpeaker) : "Nikdo nemluví"}</div>
-          <div><strong>Hlasování</strong><br>${session ? statusLabel(session.status) : "neprobíhá"}</div>
-        </div>
-      </div>
-      ${renderAgendaOverview()}
+    <div class="dashboard-strip">
+      <div><strong>Prezence</strong><span>${present}/${state.delegations.length}</span></div>
+      <div><strong>Řečník</strong><span>${state.speakers.currentSpeaker ? flagName(state.speakers.currentSpeaker) : "Nikdo"}</span></div>
+      <div><strong>Hlasování</strong><span>${session ? statusLabel(session.status) : "neprobíhá"}</span></div>
+      <div><strong>Debata</strong><span>${state.debate?.session ? debatePhaseLabel(state.debate.session.phase) : "není"}</span></div>
     </div>
-    ${renderSpeakerPanel()}
-    ${renderBreakPanel()}
-    ${renderDebatePanel()}
-    <div class="card">
+    <div class="dashboard-grid compact-dashboard">
+      ${renderSpeakerPanel("compact")}
+      ${renderAgendaOverview()}
+      ${renderBreakPanel("compact")}
+      ${renderDebatePanel()}
+    </div>
+    <div class="card compact-card">
       <h2>Aktivní PN</h2>
       <div id="items">${renderAmendmentItems()}</div>
     </div>`;
@@ -186,10 +184,6 @@ function renderAgendaOverview() {
 
 function renderAmendmentsPanel() {
   return `
-    ${renderAgendaOverview()}
-    ${renderSpeakerPanel()}
-    ${renderBreakPanel()}
-    ${renderDebatePanel()}
     <form class="card" data-form="amendment">
       <h2>Nový pozměňovací návrh</h2>
       <div class="meta compact">
@@ -205,12 +199,13 @@ function renderAmendmentsPanel() {
     <div id="items">${renderAmendmentItems()}</div>`;
 }
 
-function renderSpeakerPanel() {
+function renderSpeakerPanel(mode = "full") {
   const current = state.speakers.currentSpeaker;
+  const compact = mode === "compact";
   return `
-    <div class="card speaker-panel">
+    <div class="card speaker-panel ${compact ? "compact-card" : ""}">
       <h2>Pořadník řečníků</h2>
-      <p>Kliknutím na stát ho přidáš do pořadníku. Dvojklikem ho přidáš jako reakci na aktuální projev.</p>
+      ${compact ? "" : "<p>Kliknutím na stát ho přidáš do pořadníku. Dvojklikem ho přidáš jako reakci na aktuální projev.</p>"}
       <div class="speaker-grid">
         <div class="speaker-box">
           <div class="label">Aktuální řečník</div>
@@ -227,7 +222,7 @@ function renderSpeakerPanel() {
           <ol class="queue-list">${state.speakers.queue.length ? state.speakers.queue.map((item) => `<li data-remove-speaker="${item.id}">${flagName(item.delegation)}</li>`).join("") : "<li>Pořadník je prázdný.</li>"}</ol>
         </div>
       </div>
-      <div class="stage-wrap"><div class="stage speaker-stage">${renderChairMarker()}${renderSeats("speaker")}</div></div>
+      ${compact ? `<div class="delegation-chip-grid">${state.delegations.filter((item) => item.present).map((delegation) => `<button class="save delegation-chip" data-speaker-seat="${delegation.id}">${flagName(delegation)}</button>`).join("")}</div>` : `<div class="stage-wrap"><div class="stage speaker-stage">${renderChairMarker()}${renderSeats("speaker")}</div></div>`}
     </div>`;
 }
 
@@ -262,12 +257,13 @@ function renderReactionSlots() {
   }).join("");
 }
 
-function renderBreakPanel() {
+function renderBreakPanel(mode = "full") {
   const active = state.break;
+  const compact = mode === "compact";
   return `
-    <div class="card break-panel">
+    <div class="card break-panel ${compact ? "compact-card" : ""}">
       <h2>Přestávka / kuloární jednání</h2>
-      <p>Zvol délku v minutách a vyvolej kuloární jednání nebo přestávku na kávu. Na projekci se zobrazí velká obrazovka s odpočtem.</p>
+      ${compact ? "" : "<p>Zvol délku v minutách a vyvolej kuloární jednání nebo přestávku na kávu. Na projekci se zobrazí velká obrazovka s odpočtem.</p>"}
       <div class="break-controls">
         <div>
           <span class="label">Čas v minutách</span>
@@ -349,8 +345,11 @@ function renderLayoutPanel() {
       <div class="actions">
         <button class="save" data-arrange="circle">Rozložit do kruhu</button>
         <button class="save" data-arrange="u">Rozložit do obráceného U</button>
+        <button class="present" data-mark-all="present">Všichni přítomni</button>
+        <button class="reject" data-mark-all="absent">Všichni nepřítomni</button>
         <button class="save" data-generate-links>Vygenerovat hlasovací odkazy</button>
         <button class="save" data-export-attendance>Export XLSX</button>
+        <button class="save" data-export-qr>QR PDF</button>
         <button class="save" data-import-attendance>Import XLSX</button>
       </div>
       <div class="vote-summary"><strong>Prezenční listina</strong><br>Přítomno: ${present}<br>Nepřítomno: ${absent}</div>
@@ -429,8 +428,8 @@ function renderAgendaPanelV2() {
       <div class="meta compact">
         <div><strong>Název</strong><input name="title" value="${esc(item?.title || "")}" placeholder="Název bodu" required></div>
         <div><strong>Typ</strong><select name="type">${agendaTypeOptions(item?.type || "session")}</select></div>
-        <div><strong>Začátek</strong><input name="startsAt" type="datetime-local" value="${dateTimeLocalValue(item?.startsAt)}"></div>
-        <div><strong>Konec</strong><input name="endsAt" type="datetime-local" value="${dateTimeLocalValue(item?.endsAt)}"></div>
+        <div><strong>Začátek</strong><input name="startsAt" type="time" value="${timeInputValue(item?.startsAt)}"></div>
+        <div><strong>Konec</strong><input name="endsAt" type="time" value="${timeInputValue(item?.endsAt)}"></div>
         <div><strong>Délka v minutách</strong><input name="durationMinutes" type="number" min="1" value="${esc(item?.durationMinutes || "")}" placeholder="např. 20"></div>
         <div><strong>Pořadí</strong><input name="displayOrder" type="number" min="0" value="${esc(item?.displayOrder || "")}"></div>
       </div>
@@ -468,10 +467,6 @@ function renderSettingsPanel() {
         <div><strong>Výbor</strong><input name="committee_name" value="${esc(values.committee_name || "")}"></div>
         <div><strong>Čas hlasování v sekundách</strong><input name="default_voting_time_sec" type="number" min="1" value="${esc(values.default_voting_time_sec || "60")}"></div>
         <div><strong>Režim hlasování</strong><select name="voting_mode">${option("public", "Veřejné se schématem", votingMode)}${option("secret", "Jednoduché / tajné bez schématu", votingMode)}</select></div>
-        <div><strong>Předsednictvo X (%)</strong><input name="chair_x" type="number" min="0" max="100" step="0.1" value="${esc(values.chair_x || "38")}"></div>
-        <div><strong>Předsednictvo Y (%)</strong><input name="chair_y" type="number" min="0" max="100" step="0.1" value="${esc(values.chair_y || "2.2")}"></div>
-        <div><strong>Šířka stolku (%)</strong><input name="chair_w" type="number" min="8" max="60" step="0.1" value="${esc(values.chair_w || "24")}"></div>
-        <div><strong>Výška stolku (%)</strong><input name="chair_h" type="number" min="4" max="20" step="0.1" value="${esc(values.chair_h || "7")}"></div>
       </div>
       <div class="actions"><button class="approve">Uložit nastavení</button></div>
     </form>
@@ -736,8 +731,11 @@ function bindActions() {
   }
   const exportButton = app.querySelector("[data-export-attendance]");
   if (exportButton) exportButton.onclick = exportAttendanceXlsx;
+  const exportQRButton = app.querySelector("[data-export-qr]");
+  if (exportQRButton) exportQRButton.onclick = exportQRCodesPdf;
   const generateLinksButton = app.querySelector("[data-generate-links]");
   if (generateLinksButton) generateLinksButton.onclick = generateVoteLinks;
+  app.querySelectorAll("[data-mark-all]").forEach((button) => button.onclick = () => markAllPresence(button.dataset.markAll === "present"));
   app.querySelectorAll("[data-copy-vote-link]").forEach((button) => button.onclick = () => copyVoteLink(button.dataset.copyVoteLink));
   app.querySelectorAll("[data-code]").forEach((button) => button.onclick = () => post("/api/attendance/generate-code", { delegationId: Number(button.dataset.code) }));
   app.querySelectorAll("[data-checkin]").forEach((button) => button.onclick = () => setPresence(Number(button.dataset.checkin), true));
@@ -802,11 +800,7 @@ async function submitSettings(event) {
     conference_name: form.conference_name.value,
     committee_name: form.committee_name.value,
     default_voting_time_sec: String(form.default_voting_time_sec.value || "60"),
-    voting_mode: form.voting_mode.value,
-    chair_x: String(form.chair_x.value || "38"),
-    chair_y: String(form.chair_y.value || "2.2"),
-    chair_w: String(form.chair_w.value || "24"),
-    chair_h: String(form.chair_h.value || "7")
+    voting_mode: form.voting_mode.value
   });
 }
 
@@ -846,8 +840,8 @@ async function saveDelegateDetails() {
 }
 
 function agendaFormBody(form) {
-  const startsAt = localDateTimeToISO(form.startsAt.value);
-  const endsAt = localDateTimeToISO(form.endsAt.value);
+  const startsAt = agendaTimeToISO(form.startsAt.value);
+  const endsAt = agendaTimeToISO(form.endsAt.value);
   const durationMinutes = form.durationMinutes.value ? Number(form.durationMinutes.value) : null;
   return {
     title: form.title.value,
@@ -860,9 +854,9 @@ function agendaFormBody(form) {
   };
 }
 
-function localDateTimeToISO(value) {
+function agendaTimeToISO(value) {
   if (!value) return null;
-  const date = new Date(value);
+  const date = new Date(`2000-01-01T${value}:00`);
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
@@ -1089,6 +1083,30 @@ async function exportAttendanceXlsx() {
   }
 }
 
+async function exportQRCodesPdf() {
+  try {
+    const res = await fetch("/api/attendance/qr-codes", { method: "POST" });
+    const type = res.headers.get("Content-Type") || "";
+    if (!res.ok) {
+      const data = type.includes("application/json") ? await res.json().catch(() => null) : null;
+      throw new Error(data?.error?.message || `Export QR PDF selhal (${res.status}).`);
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "hlasovaci-qr-kody.pdf";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    await load(false);
+    showToast("QR PDF připraveno.");
+  } catch (err) {
+    showToast(err.message);
+  }
+}
+
 async function importAttendanceFile(file) {
   if (!file) return;
   const form = new FormData();
@@ -1099,6 +1117,20 @@ async function importAttendanceFile(file) {
     if (!res.ok) throw new Error(data?.error?.message || `Import selhal (${res.status}).`);
     await load(false);
     showToast(`Importováno řádků: ${data?.imported ?? 0}`);
+  } catch (err) {
+    showToast(err.message);
+  }
+}
+
+async function markAllPresence(present) {
+  const delegations = state.attendance.delegations || state.delegations || [];
+  try {
+    await Promise.all(delegations.map((delegation) => api(present ? "/api/attendance/check-in" : "/api/attendance/check-out", {
+      method: "POST",
+      body: { delegationId: delegation.id }
+    })));
+    await load(false);
+    showToast(present ? "Všichni označeni jako přítomní." : "Všichni označeni jako nepřítomní.");
   } catch (err) {
     showToast(err.message);
   }
@@ -1145,7 +1177,7 @@ function updateStatusLine() {
 }
 
 function statusText() {
-  return `SSE ${realtimeStatus} · ${new Date().toLocaleTimeString("cs-CZ", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`;
+  return `SSE ${realtimeStatus} · ${new Date().toLocaleTimeString("cs-CZ", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })}`;
 }
 
 function defaultSeat(index) {
@@ -1193,15 +1225,14 @@ function agendaTimeLabel(item) {
 
 function dateTimeLabel(value) {
   if (!value) return "";
-  return new Date(value).toLocaleString("cs-CZ", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  return new Date(value).toLocaleTimeString("cs-CZ", { hour: "2-digit", minute: "2-digit", hour12: false });
 }
 
-function dateTimeLocalValue(value) {
+function timeInputValue(value) {
   if (!value) return "";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
-  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
-  return local.toISOString().slice(0, 16);
+  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 }
 
 function voteForDelegation(id) {
@@ -1283,7 +1314,7 @@ function flagName(d) {
 
 function timeLabel(value) {
   if (!value) return "";
-  return new Date(value).toLocaleTimeString("cs-CZ", { hour: "2-digit", minute: "2-digit" });
+  return new Date(value).toLocaleTimeString("cs-CZ", { hour: "2-digit", minute: "2-digit", hour12: false });
 }
 
 function shorten(text, max) {

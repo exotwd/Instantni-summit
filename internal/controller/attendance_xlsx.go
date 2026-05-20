@@ -27,21 +27,44 @@ func writeAttendanceXLSX(w http.ResponseWriter, state domain.AttendanceSnapshot,
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
 <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
 <Default Extension="xml" ContentType="application/xml"/>
+<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>
+<Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>
 <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
 <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
 </Types>`)
 	mustZipWrite(zw, "_rels/.rels", `<?xml version="1.0" encoding="UTF-8"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
 <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>
+<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>
 </Relationships>`)
+	mustZipWrite(zw, "docProps/core.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+<dc:title>Prezence</dc:title><dc:creator>Instantni Summit</dc:creator>
+</cp:coreProperties>`)
+	mustZipWrite(zw, "docProps/app.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">
+<Application>Instantni Summit</Application>
+</Properties>`)
 	mustZipWrite(zw, "xl/workbook.xml", `<?xml version="1.0" encoding="UTF-8"?>
 <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
-<sheets><sheet name="Prezence" sheetId="1" r:id="rId1"/></sheets>
+<workbookPr date1904="false"/><sheets><sheet name="Prezence" sheetId="1" r:id="rId1"/></sheets>
 </workbook>`)
 	mustZipWrite(zw, "xl/_rels/workbook.xml.rels", `<?xml version="1.0" encoding="UTF-8"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
 <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
 </Relationships>`)
+	mustZipWrite(zw, "xl/styles.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts>
+<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>
+<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>
+<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+<cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0"/></cellXfs>
+<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
+</styleSheet>`)
 	mustZipWrite(zw, "xl/worksheets/sheet1.xml", attendanceSheetXML(state, baseURL))
 	_ = zw.Close()
 
@@ -53,7 +76,12 @@ func writeAttendanceXLSX(w http.ResponseWriter, state domain.AttendanceSnapshot,
 
 func attendanceSheetXML(state domain.AttendanceSnapshot, baseURL string) string {
 	var b strings.Builder
-	b.WriteString(`<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>`)
+	lastRow := len(state.Delegations) + 1
+	b.WriteString(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">`)
+	fmt.Fprintf(&b, `<dimension ref="A1:L%d"/>`, lastRow)
+	b.WriteString(`<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>`)
+	b.WriteString(`<cols><col min="1" max="1" width="14" customWidth="1"/><col min="2" max="3" width="18" customWidth="1"/><col min="4" max="7" width="16" customWidth="1"/><col min="8" max="12" width="24" customWidth="1"/></cols>`)
+	b.WriteString(`<sheetData>`)
 	writeXLSXRow(&b, 1, attendanceExportHeaders)
 	for i, d := range state.Delegations {
 		p := d.Participant
@@ -70,7 +98,9 @@ func attendanceSheetXML(state domain.AttendanceSnapshot, baseURL string) string 
 		}
 		writeXLSXRow(&b, i+2, values)
 	}
-	b.WriteString(`</sheetData></worksheet>`)
+	b.WriteString(`</sheetData><autoFilter ref="A1:L`)
+	b.WriteString(strconv.Itoa(lastRow))
+	b.WriteString(`"/></worksheet>`)
 	return b.String()
 }
 
@@ -82,7 +112,13 @@ func writeXLSXRow(b *strings.Builder, rowNumber int, values []string) {
 		b.WriteString(`<c r="`)
 		b.WriteString(columnName(i + 1))
 		b.WriteString(strconv.Itoa(rowNumber))
-		b.WriteString(`" t="inlineStr"><is><t>`)
+		style := ""
+		if rowNumber == 1 {
+			style = ` s="1"`
+		}
+		b.WriteString(`"`)
+		b.WriteString(style)
+		b.WriteString(` t="inlineStr"><is><t xml:space="preserve">`)
 		b.WriteString(html.EscapeString(value))
 		b.WriteString(`</t></is></c>`)
 	}
