@@ -134,20 +134,37 @@ func qrPageContent(delegations []domain.Delegation, pageIndex int, baseURL strin
 func drawQRCard(b *strings.Builder, x, top, w, h float64, delegation domain.Delegation, baseURL string) {
 	y := pdfPageH - top - h
 	link := voteLinkPath(baseURL, delegation.VoteLinkToken)
+
 	roundedRect(b, x, y, w, h, 10, "0.96 0.97 0.99 rg", "f")
 	roundedRect(b, x, y, w, h, 10, "0.82 0.86 0.92 RG", "S")
-	roundedRect(b, x+12, y+h-48, w-24, 34, 8, "0 0.2 0.6 rg", "f")
-	text(b, x+22, y+h-36, 13, "F2", "1 1 1 rg", shortenPDFText(stripDiacritics(delegation.Name), 28))
-	text(b, x+w-54, y+h-36, 12, "F2", "1 1 1 rg", stripDiacritics(delegation.Code))
 
-	qrBox := 148.0
+	headerH := 34.0
+	headerY := y + h - headerH - 12
+	roundedRect(b, x+12, headerY, w-24, headerH, 8, "0 0.2 0.6 rg", "f")
+
+	code := stripDiacritics(strings.TrimSpace(delegation.Code))
+	nameMax := 26
+	if code != "" {
+		nameMax = 22
+		codeBoxW := 42.0
+		codeBoxH := 18.0
+		codeBoxX := x + w - 12 - codeBoxW - 10
+		codeBoxY := headerY + (headerH-codeBoxH)/2
+		roundedRect(b, codeBoxX, codeBoxY, codeBoxW, codeBoxH, 5, "1 1 1 rg", "f")
+		centerText(b, codeBoxX+codeBoxW/2, codeBoxY+5.2, 8.5, "F2", "0 0.2 0.6 rg", shortenPDFText(code, 8))
+	}
+
+	text(b, x+24, headerY+11.0, 12.5, "F2", "1 1 1 rg", shortenPDFText(stripDiacritics(delegation.Name), nameMax))
+
+	qrBox := 128.0
 	qrX := x + (w-qrBox)/2
-	qrY := y + 52
-	roundedRect(b, qrX-14, qrY-14, qrBox+28, qrBox+42, 14, "1 1 1 rg", "f")
-	roundedRect(b, qrX-14, qrY-14, qrBox+28, qrBox+42, 14, "0.86 0.88 0.92 RG", "S")
-	drawQRCode(b, link, qrX, qrY+20, qrBox)
-	text(b, x+20, y+26, 8, "F1", "0.24 0.28 0.36 rg", "Odkaz pro hlasovani")
-	text(b, x+20, y+14, 7, "F1", "0.36 0.40 0.48 rg", shortenPDFText(link, 54))
+	qrY := y + 54
+	qrPad := 12.0
+	roundedRect(b, qrX-qrPad, qrY-qrPad, qrBox+2*qrPad, qrBox+2*qrPad, 14, "1 1 1 rg", "f")
+	roundedRect(b, qrX-qrPad, qrY-qrPad, qrBox+2*qrPad, qrBox+2*qrPad, 14, "0.86 0.88 0.92 RG", "S")
+	drawQRCode(b, link, qrX, qrY, qrBox)
+
+	centerText(b, x+w/2, y+24, 8.2, "F1", "0.24 0.28 0.36 rg", "Naskenujte QR kod pro hlasovani")
 }
 
 func drawQRCode(b *strings.Builder, value string, x, y, size float64) {
@@ -200,6 +217,11 @@ func text(b *strings.Builder, x, y, size float64, font, color, value string) {
 		b.WriteByte('\n')
 	}
 	fmt.Fprintf(b, "BT /%s %.1f Tf %.3f %.3f Td (%s) Tj ET\n", font, size, x, y, pdfEscape(value))
+}
+
+func centerText(b *strings.Builder, centerX, y, size float64, font, color, value string) {
+	approxWidth := float64(len(value)) * size * 0.5
+	text(b, centerX-approxWidth/2, y, size, font, color, value)
 }
 
 func pdfStream(content string) string {
