@@ -514,6 +514,7 @@ function renderSeats(mode) {
     const classes = ["seat"];
     let label = "";
     let data = "";
+    let tools = "";
     if (mode === "speaker") {
       classes.push("speaker-seat");
       data = `data-speaker-seat="${d.id}"`;
@@ -525,9 +526,18 @@ function renderSeats(mode) {
       classes.push(d.present ? "attendance-present" : "attendance-absent");
       data = `data-layout-seat="${d.id}"`;
       label = `<div class="seat-attendance">${d.present ? "PŘÍTOMEN" : "NEPŘÍTOMEN"}</div>`;
+      tools = `
+        <div class="seat-tools">
+          <button type="button" class="seat-tool" title="Upravit delegaci" data-seat-tool data-edit-delegation="${d.id}">✎</button>
+          <button type="button" class="seat-tool" title="Otočit doleva" data-seat-tool data-seat-rotate="${d.id}" data-delta="-15">↺</button>
+          <button type="button" class="seat-tool" title="Otočit doprava" data-seat-tool data-seat-rotate="${d.id}" data-delta="15">↻</button>
+          <button type="button" class="seat-tool" title="Zmenšit" data-seat-tool data-seat-resize="${d.id}" data-delta="-1">−</button>
+          <button type="button" class="seat-tool" title="Zvětšit" data-seat-tool data-seat-resize="${d.id}" data-delta="1">+</button>
+        </div>`;
     }
     return `
       <div class="${classes.join(" ")}" ${data} style="left:${seat.x}%;top:${seat.y}%;width:${seat.w}%;height:${seat.h}%;transform:rotate(${seat.rotation || 0}deg);">
+        ${tools}
         <div class="seat-inner" style="transform:rotate(${-(seat.rotation || 0)}deg);">
           <div class="seat-flag">${esc(d.flag || "")}</div>
           <div class="seat-code">${esc(d.code || "")}</div>
@@ -600,6 +610,21 @@ function bindActions() {
 
   app.querySelectorAll("[data-layout-seat]").forEach((seat) => {
     seat.onpointerdown = startLayoutDrag;
+  });
+  app.querySelectorAll("[data-seat-tool]").forEach((button) => {
+    button.onpointerdown = (event) => event.stopPropagation();
+  });
+  app.querySelectorAll("[data-seat-rotate]").forEach((button) => {
+    button.onclick = (event) => {
+      event.stopPropagation();
+      rotateLayoutSeat(Number(button.dataset.seatRotate), Number(button.dataset.delta || 0));
+    };
+  });
+  app.querySelectorAll("[data-seat-resize]").forEach((button) => {
+    button.onclick = (event) => {
+      event.stopPropagation();
+      resizeLayoutSeat(Number(button.dataset.seatResize), Number(button.dataset.delta || 0));
+    };
   });
   app.querySelectorAll("[data-arrange]").forEach((button) => button.onclick = () => arrangeSeats(button.dataset.arrange));
   app.querySelectorAll("[data-code]").forEach((button) => button.onclick = () => post("/api/attendance/generate-code", { delegationId: Number(button.dataset.code) }));
@@ -738,14 +763,14 @@ async function moveSeat(id) {
 
 function startLayoutDrag(event) {
   if (panel !== "layout") return;
+  if (event.target.closest("[data-seat-tool]")) return;
   const id = Number(event.currentTarget.dataset.layoutSeat);
   const delegation = state.delegations.find((item) => item.id === id);
   if (!delegation) return;
   event.preventDefault();
   const stage = event.currentTarget.closest(".stage");
   const rect = stage.getBoundingClientRect();
-  const seat = delegation.seat || defaultSeat(state.delegations.indexOf(delegation));
-  delegation.seat = { ...seat };
+  const seat = ensureLayoutSeat(delegation);
   draggingLayout = {
     id,
     element: event.currentTarget,
@@ -791,6 +816,34 @@ async function saveLayoutSeat(id) {
     h: seat.h,
     rotation: seat.rotation || 0
   }, "Rozložení uloženo.");
+}
+
+function ensureLayoutSeat(delegation) {
+  if (!delegation.seat) {
+    delegation.seat = { ...defaultSeat(state.delegations.indexOf(delegation)) };
+  } else {
+    delegation.seat = { ...delegation.seat };
+  }
+  return delegation.seat;
+}
+
+async function rotateLayoutSeat(id, delta) {
+  const delegation = state.delegations.find((item) => item.id === id);
+  if (!delegation) return;
+  const seat = ensureLayoutSeat(delegation);
+  seat.rotation = ((Number(seat.rotation || 0) + delta + 180) % 360) - 180;
+  await saveLayoutSeat(id);
+}
+
+async function resizeLayoutSeat(id, delta) {
+  const delegation = state.delegations.find((item) => item.id === id);
+  if (!delegation) return;
+  const seat = ensureLayoutSeat(delegation);
+  seat.w = clamp(Number(seat.w || 15) + delta, 7, 28);
+  seat.h = clamp(Number(seat.h || 9) + delta * 0.55, 4, 18);
+  seat.x = clamp(Number(seat.x || 0), 0, 100 - seat.w);
+  seat.y = clamp(Number(seat.y || 0), 0, 100 - seat.h);
+  await saveLayoutSeat(id);
 }
 
 async function arrangeSeats(kind) {
