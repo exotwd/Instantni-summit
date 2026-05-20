@@ -102,10 +102,10 @@ func validateAgenda(item domain.AgendaItem) error {
 		return NewUserError("missing_title", "Název bodu programu je povinný.")
 	}
 	if item.DurationMinutes != nil && *item.DurationMinutes <= 0 {
-		return NewUserError("invalid_duration", "DĂ©lka bodu programu musĂ­ bĂ˝t kladnĂˇ.")
+		return NewUserError("invalid_duration", "Delka bodu programu musi byt kladna.")
 	}
 	if item.StartsAt != nil && item.EndsAt != nil && !item.EndsAt.After(*item.StartsAt) {
-		return NewUserError("invalid_agenda_time", "Konec bodu programu musĂ­ bĂ˝t po zaÄŤĂˇtku.")
+		return NewUserError("invalid_agenda_time", "Konec bodu programu musi byt po zacatku.")
 	}
 	switch item.Type {
 	case domain.AgendaSession, domain.AgendaBreak, domain.AgendaCaucus, domain.AgendaVoting, domain.AgendaOrganizational, domain.AgendaOther:

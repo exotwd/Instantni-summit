@@ -113,7 +113,7 @@ func (s *SpeakerService) NextSpeaker(ctx context.Context) error {
 			if countFinishedReactions(reactions) >= 2 {
 				return advanceMainSpeaker(ctx, repo)
 			}
-			if state.CurrentDelegationID != nil && state.CurrentPausedMS > 0 {
+			if state.CurrentDelegationID != nil {
 				startedAt := time.Now().UTC().Add(-time.Duration(state.CurrentPausedMS) * time.Millisecond)
 				return repo.ResumeCurrent(ctx, startedAt)
 			}
