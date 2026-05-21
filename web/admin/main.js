@@ -385,6 +385,7 @@ function renderVotingPanel() {
         <button class="save" data-action="force-projection">Vynutit aktualizaci projekce</button>
       </div>
     </div>
+    ${state.debate?.session ? renderDebatePanel() : ""}
     <div class="stage-wrap"><div class="stage">${renderChairMarker()}${renderSeats("voting")}</div></div>
     <div class="card">
       <h2>Spustit hlasování o PN</h2>
