@@ -185,9 +185,18 @@ func readAttendanceXLSX(r *http.Request, delegations []domain.Delegation) ([]dom
 type preferenceApplicant struct {
 	Name        string
 	Email       string
+	CoName      string
+	CoEmail     string
 	Class       string
 	Preferences []string
 	Anti        map[string]bool
+}
+
+func (a preferenceApplicant) PeopleCount() int {
+	if strings.TrimSpace(a.CoName) != "" || strings.TrimSpace(a.CoEmail) != "" {
+		return 2
+	}
+	return 1
 }
 
 func readPreferenceXLSX(r *http.Request, delegations []domain.Delegation) ([]domain.Participant, int, error) {
@@ -225,7 +234,7 @@ func readPreferenceXLSX(r *http.Request, delegations []domain.Delegation) ([]dom
 	}
 	var applicants []preferenceApplicant
 	for _, row := range rows[1:] {
-		name := firstExistingCell(row, headers, "jmeno a prijmeni", "jmeno")
+		name := firstExistingCell(row, headers, "jmeno")
 		email := firstExistingCell(row, headers, "e mail", "email")
 		if strings.TrimSpace(name) == "" && strings.TrimSpace(email) == "" {
 			continue
@@ -240,6 +249,9 @@ func readPreferenceXLSX(r *http.Request, delegations []domain.Delegation) ([]dom
 			Class:       firstExistingCell(row, headers, "trida"),
 			Preferences: []string{},
 			Anti:        map[string]bool{},
+		}
+		if strings.EqualFold(normalizeHeader(wants), "ano") {
+			applicant.CoName = cleanCoDelegateName(firstExistingCell(row, headers, "jmeno a prijmeni"), applicant.Name)
 		}
 		for _, index := range preferenceColumns {
 			if index < len(row) {
@@ -288,8 +300,8 @@ func assignPreferenceApplicants(applicants []preferenceApplicant, delegations []
 				if !ok {
 					continue
 				}
-				load := len(assigned[delegation.ID])
-				if load >= 2 {
+				load := assignedPeopleCount(assigned[delegation.ID])
+				if load+applicant.PeopleCount() > 2 {
 					continue
 				}
 				if load < bestLoad {
@@ -313,8 +325,8 @@ func assignPreferenceApplicants(applicants []preferenceApplicant, delegations []
 		bestLoad := 3
 		for _, delegation := range delegations {
 			country := normalizeCountryName(delegation.Name)
-			load := len(assigned[delegation.ID])
-			if load >= 2 || applicant.Anti[country] {
+			load := assignedPeopleCount(assigned[delegation.ID])
+			if load+applicant.PeopleCount() > 2 || applicant.Anti[country] {
 				continue
 			}
 			if load < bestLoad {
@@ -341,7 +353,10 @@ func assignPreferenceApplicants(applicants []preferenceApplicant, delegations []
 			Email:        group[0].Email,
 			Note:         preferenceNote(group[0], delegation.Name),
 		}
-		if len(group) > 1 {
+		if group[0].PeopleCount() == 2 {
+			participant.CoDelegateName = group[0].CoName
+			participant.CoDelegateEmail = group[0].CoEmail
+		} else if len(group) > 1 {
 			participant.CoDelegateName = group[1].Name
 			participant.CoDelegateEmail = group[1].Email
 			participant.Note = strings.TrimSpace(participant.Note + "\n" + preferenceNote(group[1], delegation.Name))
@@ -349,6 +364,38 @@ func assignPreferenceApplicants(applicants []preferenceApplicant, delegations []
 		out = append(out, participant)
 	}
 	return out, skipped, nil
+}
+
+func assignedPeopleCount(group []preferenceApplicant) int {
+	count := 0
+	for _, applicant := range group {
+		count += applicant.PeopleCount()
+	}
+	return count
+}
+
+func cleanCoDelegateName(value, primary string) string {
+	value = strings.TrimSpace(value)
+	primary = strings.TrimSpace(primary)
+	if value == "" || normalizeHeader(value) == normalizeHeader(primary) {
+		return ""
+	}
+	normalizedValue := normalizeHeader(value)
+	normalizedPrimary := normalizeHeader(primary)
+	if strings.Contains(normalizedValue, normalizedPrimary) && strings.Contains(normalizedValue, " a ") {
+		parts := strings.Split(value, " a ")
+		cleaned := []string{}
+		for _, part := range parts {
+			part = strings.TrimSpace(part)
+			if part != "" && normalizeHeader(part) != normalizedPrimary {
+				cleaned = append(cleaned, part)
+			}
+		}
+		if len(cleaned) > 0 {
+			return strings.Join(cleaned, " a ")
+		}
+	}
+	return value
 }
 
 func preferenceNote(applicant preferenceApplicant, assignedCountry string) string {

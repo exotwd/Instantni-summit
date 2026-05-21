@@ -125,6 +125,27 @@ body {
   padding: 8px 10px;
 }
 
+.top-break-status {
+  max-width: 260px;
+  padding: 8px 10px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.top-break-status.active {
+  border-color: #bbf7d0;
+  background: #ecfdf5;
+  color: #14532d;
+}
+
 .card {
   margin-bottom: 12px;
   padding: 14px;
@@ -747,7 +768,7 @@ html.flag-emoji-polyfill body {
 
 .agenda-inline-table {
   width: 100%;
-  min-width: 980px;
+  min-width: 1080px;
   border-collapse: collapse;
 }
 
@@ -772,17 +793,44 @@ html.flag-emoji-polyfill body {
 }
 
 .agenda-inline-table input,
-.agenda-inline-table select {
+.agenda-inline-table select,
+.agenda-inline-table textarea {
   min-height: 34px;
   padding: 7px 9px;
   border-radius: 10px;
   font-size: 13px;
 }
 
-.agenda-inline-table td:nth-child(1) input,
+.agenda-inline-table textarea {
+  width: 100%;
+  min-width: 240px;
+  min-height: 76px;
+  resize: vertical;
+  line-height: 1.35;
+}
+
 .agenda-inline-table td:nth-child(2) input,
-.agenda-inline-table td:nth-child(6) input {
+.agenda-inline-table td:nth-child(3) input,
+.agenda-inline-table td:nth-child(7) input {
   width: 90px;
+}
+
+.drag-handle {
+  width: 32px;
+  min-height: 32px;
+  padding: 0;
+  border-color: var(--line-strong);
+  background: #fff;
+  color: var(--muted);
+  cursor: grab;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+.agenda-inline-table tr.dragging {
+  opacity: .55;
 }
 
 .section-head {
@@ -880,6 +928,18 @@ html.flag-emoji-polyfill body {
   color: var(--muted);
   font-size: 12px;
   line-height: 1.25;
+}
+
+.agenda-note {
+  margin-top: 6px;
+  color: #374151;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.agenda-note strong {
+  display: inline;
+  font-size: inherit;
 }
 
 .agenda-break,

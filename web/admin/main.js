@@ -156,6 +156,7 @@ function renderPanel() {
 }
 
 function renderTopBreakControls() {
+  const active = state.break;
   return `
     <div class="top-break-controls" aria-label="Ovládání přestávky">
       <span>Přestávka</span>
@@ -163,6 +164,7 @@ function renderTopBreakControls() {
       <button class="caucus-button" data-break-start="caucus">Kuloár</button>
       <button class="coffee-button" data-break-start="coffee_break">Káva</button>
       <button class="save" data-action="end-break">Stop</button>
+      <strong class="top-break-status ${active ? "active" : ""}">${active ? `${esc(active.title)} běží, končí ${timeLabel(active.endsAt)}.` : "neběží"}</strong>
     </div>`;
 }
 
@@ -213,6 +215,7 @@ function renderAgendaTimelineItem(item) {
       <div class="agenda-copy">
         <strong>${esc(item.title)}</strong>
         <small>${agendaTypeLabel(item.type)}${duration ? ` · ${duration} min` : ""}</small>
+        ${item.note ? `<div class="agenda-note">${formatRichText(item.note)}</div>` : ""}
       </div>
     </div>`;
 }
@@ -484,17 +487,18 @@ function renderAgendaInlineTable() {
   return `
     <div class="agenda-inline-wrap">
       <table class="agenda-inline-table">
-        <thead><tr><th>Čas</th><th>Trvání</th><th>Název</th><th>Typ</th><th>Poznámka</th><th>Pořadí</th><th></th></tr></thead>
+        <thead><tr><th></th><th>Čas</th><th>Trvání</th><th>Název</th><th>Typ</th><th>Poznámka</th><th>Pořadí</th><th></th></tr></thead>
         <tbody>${state.agenda.length ? state.agenda.map((row) => `
-          <tr data-data-agenda-row="${row.id}">
+          <tr data-data-agenda-row="${row.id}" draggable="true">
+            <td><button type="button" class="drag-handle" data-agenda-drag-handle title="Přetáhnout">↕</button></td>
             <td><input name="startsAt" type="time" value="${esc(timeInputValue(row.startsAt))}"></td>
             <td><input name="durationMinutes" type="number" min="0" value="${esc(row.durationMinutes || "")}"></td>
             <td><input name="title" value="${esc(row.title || "")}"></td>
             <td><select name="type">${agendaTypeOptions(row.type)}</select></td>
-            <td><input name="note" value="${esc(row.note || "")}"></td>
+            <td><textarea name="note" placeholder="Poznámka, **tučně**, *kurzíva*">${esc(row.note || "")}</textarea></td>
             <td><input name="displayOrder" type="number" value="${esc(row.displayOrder || 0)}"></td>
             <td><button class="reject compact-button" data-delete-agenda="${row.id}">Smazat</button></td>
-          </tr>`).join("") : `<tr><td colspan="7" class="muted">Agenda je prázdná.</td></tr>`}</tbody>
+          </tr>`).join("") : `<tr><td colspan="8" class="muted">Agenda je prázdná.</td></tr>`}</tbody>
       </table>
     </div>`;
 }
@@ -996,6 +1000,7 @@ function bindActions() {
   if (saveDataDelegations) saveDataDelegations.onclick = saveDataDelegationsTable;
   const saveDataAgenda = app.querySelector("[data-save-data-agenda]");
   if (saveDataAgenda) saveDataAgenda.onclick = saveDataAgendaTable;
+  bindAgendaDrag();
   const saveDataAmendments = app.querySelector("[data-save-data-amendments]");
   if (saveDataAmendments) saveDataAmendments.onclick = saveDataAmendmentsTable;
   app.querySelectorAll("[data-delete-agenda]").forEach((button) => button.onclick = () => request(`/api/agenda/${button.dataset.deleteAgenda}`, { method: "DELETE" }));
@@ -1151,15 +1156,58 @@ async function saveDataAgendaTable(event) {
   event.preventDefault();
   const rows = Array.from(app.querySelectorAll("[data-data-agenda-row]"));
   try {
-    for (const row of rows) {
+    for (let index = 0; index < rows.length; index++) {
+      const row = rows[index];
       const id = Number(row.dataset.dataAgendaRow);
-      await api(`/api/agenda/${id}`, { method: "PUT", body: agendaRowBody(row) });
+      const body = agendaRowBody(row);
+      body.displayOrder = index + 1;
+      await api(`/api/agenda/${id}`, { method: "PUT", body });
     }
     await load(false);
     showToast("Agenda uložena.");
   } catch (err) {
     showToast(err.message);
   }
+}
+
+async function reorderAgendaFromDom() {
+  const ids = Array.from(app.querySelectorAll("[data-data-agenda-row]")).map((row) => Number(row.dataset.dataAgendaRow)).filter(Boolean);
+  if (!ids.length) return;
+  try {
+    await api("/api/agenda/reorder", { method: "POST", body: { ids } });
+    await load(false);
+    showToast("Pořadí agendy uloženo.");
+  } catch (err) {
+    showToast(err.message);
+  }
+}
+
+function bindAgendaDrag() {
+  let draggedRow = null;
+  app.querySelectorAll("[data-data-agenda-row]").forEach((row) => {
+    row.ondragstart = (event) => {
+      if (!event.target.closest("[data-agenda-drag-handle]")) {
+        event.preventDefault();
+        return;
+      }
+      draggedRow = row;
+      row.classList.add("dragging");
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", row.dataset.dataAgendaRow || "");
+    };
+    row.ondragover = (event) => {
+      if (!draggedRow || draggedRow === row) return;
+      event.preventDefault();
+      const rect = row.getBoundingClientRect();
+      const after = event.clientY > rect.top + rect.height / 2;
+      row.parentNode.insertBefore(draggedRow, after ? row.nextSibling : row);
+    };
+    row.ondragend = async () => {
+      if (draggedRow) draggedRow.classList.remove("dragging");
+      draggedRow = null;
+      await reorderAgendaFromDom();
+    };
+  });
 }
 
 async function saveDataAmendmentsTable(event) {
@@ -1728,6 +1776,14 @@ function voteLabel(value) {
   if (value === "against") return "PROTI";
   if (value === "abstain") return "ZDRŽUJE SE";
   return "NEHLASOVAL";
+}
+
+function formatRichText(value) {
+  let html = esc(value);
+  html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  html = html.replace(/\*([^*]+)\*/g, "<em>$1</em>");
+  html = html.replace(/\n/g, "<br>");
+  return html;
 }
 
 function statusLabel(value) {
