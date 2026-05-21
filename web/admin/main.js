@@ -162,7 +162,7 @@ function renderDashboardPanel() {
       <div><strong>Prezence</strong><span>${present}/${state.delegations.length}</span></div>
       <div><strong>Řečník</strong><span>${state.speakers.currentSpeaker ? flagName(state.speakers.currentSpeaker) : "Nikdo"}</span></div>
       <div><strong>Hlasování</strong><span>${session ? statusLabel(session.status) : "neprobíhá"}</span></div>
-      <div><strong>Debata</strong><span>${state.debate?.session ? debatePhaseLabel(state.debate.session.phase) : "není"}</span></div>
+      <div><strong>Fáze PN</strong><span>${state.debate?.session ? debatePhaseLabel(state.debate.session.phase) : "není"}</span></div>
     </div>
     <div class="dashboard-grid compact-dashboard">
       ${renderSpeakerPanel("compact")}
@@ -285,19 +285,16 @@ function renderBreakPanel(mode = "full") {
   const compact = mode === "compact";
   return `
     <div class="card break-panel ${compact ? "compact-card" : ""}">
-      <h2>Přestávka / kuloární jednání</h2>
-      ${compact ? "" : "<p>Zvol délku v minutách a vyvolej kuloární jednání nebo přestávku na kávu. Na projekci se zobrazí velká obrazovka s odpočtem.</p>"}
-      <div class="break-controls">
-        <div>
-          <span class="label">Čas v minutách</span>
-          <input id="breakMinutes" type="number" min="1" max="180" value="5">
-        </div>
-        <div class="break-buttons">
-          <button class="caucus-button" data-break-start="caucus">Vyvolat kuloární jednání</button>
-          <button class="coffee-button" data-break-start="coffee_break">Přestávka na kávu</button>
-          <button class="save" data-action="end-break">Ukončit</button>
+      <div class="break-head">
+        <h2>Přestávka / kuloární jednání</h2>
+        <div class="break-quickbar">
+          <label>Min<input id="breakMinutes" type="number" min="1" max="180" value="5"></label>
+          <button class="caucus-button" data-break-start="caucus">Kuloár</button>
+          <button class="coffee-button" data-break-start="coffee_break">Káva</button>
+          <button class="save" data-action="end-break">Stop</button>
         </div>
       </div>
+      ${compact ? "" : "<p>Zvol délku v minutách a vyvolej kuloární jednání nebo přestávku na kávu. Na projekci se zobrazí velká obrazovka s odpočtem.</p>"}
       <div class="break-status ${active ? "" : "inactive"}">${active ? `${esc(active.title)} běží, končí ${timeLabel(active.endsAt)}.` : "Žádná přestávka ani kuloární jednání právě neběží."}</div>
     </div>`;
 }
@@ -309,7 +306,7 @@ function renderDebatePanel(options = {}) {
   if (!session) return "";
   return `
     <div class="card debate-panel">
-      <h2>Jednání o PN ${debate.amendment?.number || ""}</h2>
+      <h2>Hlasování o PN ${debate.amendment?.number || ""}</h2>
       <div class="meta">
         <div><strong>Fáze</strong><br>${debatePhaseLabel(session.phase)}</div>
         <div><strong>Předkladatel</strong><br>${debate.submitter ? flagName(debate.submitter) : (debate.amendment?.submitterName || "Předkladatel")}</div>
@@ -322,7 +319,7 @@ function renderDebatePanel(options = {}) {
       <div class="actions">
         <button class="save" data-action="debate-next">Další krok</button>
         ${session.phase === "ready_to_vote" && debate.amendment ? `<button class="vote-button" data-start-voting="${debate.amendment.id}">Spustit hlasování</button>` : ""}
-        <button class="reject" data-action="debate-cancel">Zrušit jednání</button>
+        <button class="reject" data-action="debate-cancel">Zrušit hlasování</button>
       </div>
     </div>`;
 }
@@ -389,7 +386,7 @@ function renderVotingPanel() {
   const secretMode = isSecretVotingMode();
   const showDebateSchema = !session && !!state.debate?.session;
   const schemaMode = showDebateSchema ? "debate" : "voting";
-  const schemaTitle = showDebateSchema ? "Schéma pro předhlasovací jednání" : "Schéma hlasování";
+  const schemaTitle = "Schéma hlasování";
   return `
     <div class="card voting-current">
       <h2>Hlasování o PN</h2>
@@ -652,7 +649,7 @@ function renderDataRuntimeTable() {
       </div>
       <div class="runtime-grid">
         <div><strong>Hlasování</strong><span>${vote ? `PN ${esc(vote.amendmentId)} · ${esc(vote.status)}` : "neprobíhá"}</span></div>
-        <div><strong>Jednání o PN</strong><span>${debate ? esc(debate.phase || "") : "neprobíhá"}</span></div>
+        <div><strong>Fáze PN</strong><span>${debate ? esc(debate.phase || "") : "neprobíhá"}</span></div>
         <div><strong>Pořadník</strong><span>${speakerCount} položek</span></div>
         <div><strong>Přestávka</strong><span>${state.break?.active ? esc(state.break.title || "běží") : "neprobíhá"}</span></div>
       </div>
@@ -842,8 +839,8 @@ function debateInstruction(phase) {
   if (phase === "select_supporter") return "Vyber podporovatele kliknutím na jeho stůl ve schématu.";
   if (phase === "select_opponent") return "Vyber odpůrce kliknutím na jeho stůl ve schématu.";
   if (phase === "supporter_speaking") return "Běží prostor podporovatele. Další krok spustí odpůrce nebo ukončí projevy.";
-  if (phase === "opponent_speaking") return "Běží prostor odpůrce. Další krok ukončí předhlasovací jednání.";
-  if (phase === "ready_to_vote") return "Jednání skončilo. Teď lze spustit hlasování.";
+  if (phase === "opponent_speaking") return "Běží prostor odpůrce. Další krok dokončí úvodní fázi hlasování.";
+  if (phase === "ready_to_vote") return "Úvodní fáze je hotová. Teď lze spustit hlasování.";
   return "";
 }
 
@@ -895,8 +892,8 @@ function bindActions() {
   app.querySelectorAll("[data-start-voting-process]").forEach((button) => button.onclick = () => startVotingProcess(Number(button.dataset.startVotingProcess)));
   app.querySelectorAll("[data-start-voting]").forEach((button) => button.onclick = () => post("/api/admin/voting/start", { amendmentId: Number(button.dataset.startVoting) }, "Hlasování spuštěno."));
   app.querySelectorAll("[data-debate-select]").forEach((button) => button.onclick = () => post("/api/debate/select", { delegationId: Number(button.dataset.debateSelect) }, "Výběr uložen."));
-  click("debate-next", () => post("/api/debate/next", {}, "Jednání posunuto."));
-  click("debate-cancel", () => post("/api/debate/cancel", {}, "Jednání zrušeno."));
+  click("debate-next", () => post("/api/debate/next", {}, "Fáze hlasování posunuta."));
+  click("debate-cancel", () => post("/api/debate/cancel", {}, "Hlasování zrušeno."));
 
   app.querySelectorAll("[data-vote-action]").forEach((button) => {
     button.onclick = () => post(`/api/admin/voting/${button.dataset.voteAction}`, { sessionId: state.voting.session?.id });
@@ -1015,17 +1012,17 @@ async function startVotingProcess(id) {
   }
   const debate = state.debate || {};
   if (debate.session && Number(debate.amendment?.id || 0) !== Number(id)) {
-    showToast("Nejdřív dokonči nebo zruš aktuální jednání o jiném PN.");
+    showToast("Nejdřív dokonči nebo zruš aktuální hlasování o jiném PN.");
     return;
   }
   if (debate.session) {
-    showToast("Před hlasováním dokonči čtení návrhu, podporovatele a odpůrce.");
+    showToast("Dokonči čtení návrhu, podporovatele a odpůrce.");
     panel = "voting";
     render();
     return;
   }
   panel = "voting";
-  await post(`/api/amendments/${id}/debate`, {}, "Předhlasovací část spuštěna.");
+  await post(`/api/amendments/${id}/debate`, {}, "Hlasování zahájeno.");
 }
 
 async function submitAgenda(event) {
@@ -1696,7 +1693,7 @@ function voteLabel(value) {
 function statusLabel(value) {
   return ({
     submitted: "Nový",
-    accepted: "Zařazený k projednání",
+    accepted: "Zapracovaný",
     introduced: "Představený",
     rejected: "Vyřazený",
     passed: "Přijatý",

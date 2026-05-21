@@ -202,7 +202,7 @@ function renderDebateOverlay() {
   return `
     <div class="debate-overlay visible">
       <div class="debate-header">
-        <div class="debate-title">Jednání o PN ${debate.amendment?.number || ""}</div>
+        <div class="debate-title">Hlasování o PN ${debate.amendment?.number || ""}</div>
         <div class="debate-subtitle">${esc(shorten(debate.amendment?.text || "", 220))}</div>
       </div>
       <div class="debate-phase">${debatePhaseLabel(session.phase)}</div>
@@ -385,7 +385,7 @@ function debatePhaseLabel(value) {
     select_opponent: "Předsedající vybírá odpůrce",
     supporter_speaking: "Mluví podporovatel návrhu",
     opponent_speaking: "Mluví odpůrce návrhu",
-    ready_to_vote: "Jednání skončilo, připravuje se hlasování"
+    ready_to_vote: "Úvodní fáze hotová, připravuje se hlasování"
   })[value] || value || "";
 }
 
