@@ -930,18 +930,6 @@ html.flag-emoji-polyfill body {
   line-height: 1.25;
 }
 
-.agenda-note {
-  margin-top: 6px;
-  color: #374151;
-  font-size: 13px;
-  line-height: 1.45;
-}
-
-.agenda-note strong {
-  display: inline;
-  font-size: inherit;
-}
-
 .agenda-break,
 .agenda-caucus {
   --agenda-color: var(--teal);

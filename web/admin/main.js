@@ -171,17 +171,19 @@ function renderTopBreakControls() {
 function renderDashboardPanel() {
   const present = state.delegations.filter((item) => item.present).length;
   const session = state.voting.session;
+  const breakStatus = state.break
+    ? `${state.break.title} běží, končí ${timeLabel(state.break.endsAt)}.`
+    : "Žádná přestávka ani kuloární jednání právě neběží.";
   return `
     <div class="dashboard-strip">
       <div><strong>Prezence</strong><span>${present}/${state.delegations.length}</span></div>
       <div><strong>Řečník</strong><span>${state.speakers.currentSpeaker ? flagName(state.speakers.currentSpeaker) : "Nikdo"}</span></div>
       <div><strong>Hlasování</strong><span>${session ? statusLabel(session.status) : "neprobíhá"}</span></div>
-      <div><strong>Fáze PN</strong><span>${state.debate?.session ? debatePhaseLabel(state.debate.session.phase) : "není"}</span></div>
+      <div><strong>Přestávka / kuloární jednání</strong><span>${esc(breakStatus)}</span></div>
     </div>
     <div class="dashboard-grid compact-dashboard">
       ${renderSpeakerPanel("compact")}
       ${renderAgendaOverview()}
-      ${renderBreakPanel("compact")}
       ${renderDebatePanel()}
     </div>
     <div class="card compact-card">
@@ -215,7 +217,6 @@ function renderAgendaTimelineItem(item) {
       <div class="agenda-copy">
         <strong>${esc(item.title)}</strong>
         <small>${agendaTypeLabel(item.type)}${duration ? ` · ${duration} min` : ""}</small>
-        ${item.note ? `<div class="agenda-note">${formatRichText(item.note)}</div>` : ""}
       </div>
     </div>`;
 }
@@ -671,7 +672,7 @@ function renderDataRuntimeTable() {
       </div>
       <div class="runtime-grid">
         <div><strong>Hlasování</strong><span>${vote ? `PN ${esc(vote.amendmentId)} · ${esc(vote.status)}` : "neprobíhá"}</span></div>
-        <div><strong>Fáze PN</strong><span>${debate ? esc(debate.phase || "") : "neprobíhá"}</span></div>
+        <div><strong>Hlasování PN</strong><span>${debate ? debatePhaseLabel(debate.phase || "") : "neprobíhá"}</span></div>
         <div><strong>Pořadník</strong><span>${speakerCount} položek</span></div>
         <div><strong>Přestávka</strong><span>${state.break?.active ? esc(state.break.title || "běží") : "neprobíhá"}</span></div>
       </div>
