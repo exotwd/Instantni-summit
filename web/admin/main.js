@@ -127,7 +127,7 @@ function render() {
   app.innerHTML = `
     <div class="top">
       <h1>MUN řízení schůze</h1>
-      <p>PN se nejdřív zařadí do jednání, poté představí a teprve potom se zpřístupní hlasování.</p>
+      <p>PN se nejdřív zapracuje a představí. Tlačítko Zahájit hlasování potom provede čtení návrhu, podporovatele, odpůrce a samotné hlasování.</p>
     </div>
     <div class="wrap">
       <div class="status-line">
@@ -334,7 +334,8 @@ function renderAmendmentItems() {
   }
   return active.map((item) => {
     const ready = item.status === "introduced";
-    const canVote = canStartVotingFor(item);
+    const canStartProcess = canStartVotingProcessFor(item);
+    const processLabel = canStartVotingFor(item) ? "Spustit hlasování" : "Zahájit hlasování";
     return `
       <div class="card ${amendmentClass(item)}" id="card-${item.id}">
         <div class="meta">
@@ -350,8 +351,7 @@ function renderAmendmentItems() {
           ${item.status === "submitted" ? `<button class="approve" data-accept="${item.id}">Zapracovat do dokumentu</button>` : ""}
           ${item.status === "accepted" || item.status === "introduced" ? `<button class="present" data-introduce="${item.id}">Označit jako představený</button>` : ""}
           <button class="reject" data-reject="${item.id}">Vyřadit</button>
-          <button class="save" data-debate="${item.id}" ${ready ? "" : "disabled"}>Zahájit jednání</button>
-          <button class="vote-button" data-start-voting="${item.id}" ${canVote ? "" : "disabled"}>Hlasovat o PN</button>
+          <button class="vote-button" data-start-voting-process="${item.id}" ${canStartProcess ? "" : "disabled"}>${processLabel}</button>
         </div>
       </div>`;
   }).join("");
@@ -413,7 +413,7 @@ function renderVotingPanel() {
     </div>
     <div class="card">
       <h2>Spustit hlasování o PN</h2>
-      ${state.amendments.length ? state.amendments.map((item) => `<div class="item"><b>PN ${item.number}</b> <span class="badge">${statusLabel(item.status)}</span><p>${esc(item.text)}</p><button class="vote-button" data-start-voting="${item.id}" ${canStartVotingFor(item) ? "" : "disabled"}>Hlasovat</button></div>`).join("") : `<div class="empty">Zatím nejsou žádné PN.</div>`}
+      ${state.amendments.length ? state.amendments.map((item) => `<div class="item"><b>PN ${item.number}</b> <span class="badge">${statusLabel(item.status)}</span><p>${esc(item.text)}</p><button class="vote-button" data-start-voting-process="${item.id}" ${canStartVotingProcessFor(item) ? "" : "disabled"}>${canStartVotingFor(item) ? "Spustit hlasování" : "Zahájit hlasování"}</button></div>`).join("") : `<div class="empty">Zatím nejsou žádné PN.</div>`}
     </div>`;
 }
 
@@ -830,6 +830,13 @@ function canStartVotingFor(item) {
     Number(state?.debate?.amendment?.id || 0) === Number(item.id || 0);
 }
 
+function canStartVotingProcessFor(item) {
+  if (item?.status !== "introduced") return false;
+  const debate = state?.debate;
+  if (!debate?.session) return true;
+  return Number(debate.amendment?.id || 0) === Number(item.id || 0);
+}
+
 function debateInstruction(phase) {
   if (phase === "submitter_reading") return "Předkladatel čte návrh. Po přečtení pokračuj tlačítkem Další krok.";
   if (phase === "select_supporter") return "Vyber podporovatele kliknutím na jeho stůl ve schématu.";
@@ -885,7 +892,7 @@ function bindActions() {
   app.querySelectorAll("[data-accept]").forEach((button) => button.onclick = () => post(`/api/amendments/${button.dataset.accept}/accept`, {}, "PN zapracován do dokumentu."));
   app.querySelectorAll("[data-introduce]").forEach((button) => button.onclick = () => post(`/api/amendments/${button.dataset.introduce}/introduce`, {}));
   app.querySelectorAll("[data-reject]").forEach((button) => button.onclick = () => post(`/api/amendments/${button.dataset.reject}/reject`, {}));
-  app.querySelectorAll("[data-debate]").forEach((button) => button.onclick = () => post(`/api/amendments/${button.dataset.debate}/debate`, {}));
+  app.querySelectorAll("[data-start-voting-process]").forEach((button) => button.onclick = () => startVotingProcess(Number(button.dataset.startVotingProcess)));
   app.querySelectorAll("[data-start-voting]").forEach((button) => button.onclick = () => post("/api/admin/voting/start", { amendmentId: Number(button.dataset.startVoting) }, "Hlasování spuštěno."));
   app.querySelectorAll("[data-debate-select]").forEach((button) => button.onclick = () => post("/api/debate/select", { delegationId: Number(button.dataset.debateSelect) }, "Výběr uložen."));
   click("debate-next", () => post("/api/debate/next", {}, "Jednání posunuto."));
@@ -993,6 +1000,32 @@ async function submitAmendment(event) {
     guarantorsText: form.guarantorsText.value,
     text: form.text.value
   });
+}
+
+async function startVotingProcess(id) {
+  const item = state.amendments.find((amendment) => Number(amendment.id) === Number(id));
+  if (!item) return showToast("PN se nepodařilo najít.");
+  if (canStartVotingFor(item)) {
+    await post("/api/admin/voting/start", { amendmentId: Number(id) }, "Hlasování spuštěno.");
+    return;
+  }
+  if (item.status !== "introduced") {
+    showToast("PN musí být nejdřív zapracovaný a představený.");
+    return;
+  }
+  const debate = state.debate || {};
+  if (debate.session && Number(debate.amendment?.id || 0) !== Number(id)) {
+    showToast("Nejdřív dokonči nebo zruš aktuální jednání o jiném PN.");
+    return;
+  }
+  if (debate.session) {
+    showToast("Před hlasováním dokonči čtení návrhu, podporovatele a odpůrce.");
+    panel = "voting";
+    render();
+    return;
+  }
+  panel = "voting";
+  await post(`/api/amendments/${id}/debate`, {}, "Předhlasovací část spuštěna.");
 }
 
 async function submitAgenda(event) {
