@@ -177,14 +177,34 @@ function renderDashboardPanel() {
 }
 
 function renderAgendaOverview() {
+  const totalMinutes = state.agenda.reduce((sum, item) => sum + Number(item.durationMinutes || agendaDurationFromTimes(item) || 0), 0);
   return `
     <div class="card agenda-overview">
-      <h2>Agenda</h2>
-      ${state.agenda.length ? state.agenda.map((item) => `
-        <div class="agenda-row">
-          <div><strong>${esc(item.title)}</strong><br><span class="muted">${agendaTypeLabel(item.type)}${agendaTimeLabel(item) ? " · " + agendaTimeLabel(item) : ""}</span></div>
-          <button class="save" data-panel="agenda">Upravit</button>
-        </div>`).join("") : `<div class="empty">Agenda je zatím prázdná.</div>`}
+      <div class="section-head">
+        <h2>Agenda</h2>
+        <button class="save" data-panel="agenda">Upravit</button>
+      </div>
+      ${state.agenda.length ? `
+        <div class="agenda-summary"><strong>${state.agenda.length}</strong> bodů · <strong>${totalMinutes || "?"}</strong> min</div>
+        <div class="agenda-timeline">
+          ${state.agenda.map((item) => renderAgendaTimelineItem(item)).join("")}
+        </div>` : `<div class="empty">Agenda je zatím prázdná.</div>`}
+    </div>`;
+}
+
+function renderAgendaTimelineItem(item) {
+  const duration = Number(item.durationMinutes || agendaDurationFromTimes(item) || 0);
+  const width = clamp(duration ? duration * 1.55 : 26, 22, 100);
+  return `
+    <div class="agenda-timeline-item agenda-${esc(item.type || "other")}">
+      <div class="agenda-time">${agendaTimeLabel(item) || "bez času"}</div>
+      <div class="agenda-track">
+        <span style="width:${width}%"></span>
+      </div>
+      <div class="agenda-copy">
+        <strong>${esc(item.title)}</strong>
+        <small>${agendaTypeLabel(item.type)}${duration ? ` · ${duration} min` : ""}</small>
+      </div>
     </div>`;
 }
 
@@ -285,9 +305,10 @@ function renderBreakPanel(mode = "full") {
     </div>`;
 }
 
-function renderDebatePanel() {
+function renderDebatePanel(options = {}) {
   const debate = state.debate || {};
   const session = debate.session;
+  const includeStage = options.includeStage !== false;
   if (!session) return "";
   return `
     <div class="card debate-panel">
@@ -300,7 +321,7 @@ function renderDebatePanel() {
       </div>
       <p>${esc(debate.amendment?.text || "")}</p>
       <div class="voting-status">${debateInstruction(session.phase)}</div>
-      <div class="stage-wrap"><div class="stage debate-stage compact-stage">${renderChairMarker()}${renderSeats("debate")}</div></div>
+      ${includeStage ? `<div class="stage-wrap"><div class="stage debate-stage compact-stage">${renderChairMarker()}${renderSeats("debate")}</div></div>` : ""}
       <div class="actions">
         <button class="save" data-action="debate-next">Další krok</button>
         ${session.phase === "ready_to_vote" && debate.amendment ? `<button class="vote-button" data-start-voting="${debate.amendment.id}">Spustit hlasování</button>` : ""}
@@ -369,6 +390,9 @@ function renderLayoutPanel() {
 function renderVotingPanel() {
   const session = state.voting.session;
   const secretMode = isSecretVotingMode();
+  const showDebateSchema = !session && !!state.debate?.session;
+  const schemaMode = showDebateSchema ? "debate" : "voting";
+  const schemaTitle = showDebateSchema ? "Schéma pro předhlasovací jednání" : "Schéma hlasování";
   return `
     <div class="card voting-current">
       <h2>Hlasování o PN</h2>
@@ -385,8 +409,11 @@ function renderVotingPanel() {
         <button class="save" data-action="force-projection">Vynutit aktualizaci projekce</button>
       </div>
     </div>
-    ${state.debate?.session ? renderDebatePanel() : ""}
-    <div class="stage-wrap"><div class="stage">${renderChairMarker()}${renderSeats("voting")}</div></div>
+    ${state.debate?.session ? renderDebatePanel({ includeStage: false }) : ""}
+    <div class="stage-wrap unified-voting-stage">
+      <div class="stage-caption">${schemaTitle}</div>
+      <div class="stage">${renderChairMarker()}${renderSeats(schemaMode)}</div>
+    </div>
     <div class="card">
       <h2>Spustit hlasování o PN</h2>
       ${state.amendments.length ? state.amendments.map((item) => `<div class="item"><b>PN ${item.number}</b> <span class="badge">${statusLabel(item.status)}</span><p>${esc(item.text)}</p><button class="vote-button" data-start-voting="${item.id}" ${canStartVotingFor(item) ? "" : "disabled"}>Hlasovat</button></div>`).join("") : `<div class="empty">Zatím nejsou žádné PN.</div>`}
@@ -564,9 +591,10 @@ function renderDelegateEditor() {
 
 function renderSeats(mode) {
   return state.delegations.map((d, index) => {
-    const seat = d.seat || defaultSeat(index);
+    const seat = mode === "layout" ? (d.seat || defaultSeat(index)) : overviewSeat(index, state.delegations.length);
     const vote = voteForDelegation(d.id);
     const classes = ["seat"];
+    if (mode !== "layout") classes.push("overview-seat");
     let label = "";
     let data = "";
     let tools = "";
@@ -644,6 +672,9 @@ function isSecretVotingMode() {
 
 function chairSeat() {
   const values = state?.settings?.values || {};
+  if (panel !== "layout") {
+    return { x: 40, y: 79, w: 20, h: 8, rotation: 0 };
+  }
   return {
     x: numberSetting(values.chair_x, 38),
     y: numberSetting(values.chair_y, 2.2),
@@ -656,6 +687,26 @@ function chairSeat() {
 function numberSetting(value, fallback) {
   const number = Number(value);
   return Number.isFinite(number) ? number : fallback;
+}
+
+function overviewSeat(index, count) {
+  const columns = count <= 18 ? 6 : 9;
+  const rows = Math.ceil(count / columns);
+  const row = Math.floor(index / columns);
+  const col = index % columns;
+  const width = count <= 18 ? 11.2 : 8.7;
+  const height = count <= 18 ? 9.2 : 8.2;
+  const xStart = count <= 18 ? 13 : 7;
+  const xGap = (100 - xStart * 2 - width) / Math.max(columns - 1, 1);
+  const yStart = rows <= 2 ? 22 : 14;
+  const yGap = rows <= 2 ? 22 : 15.5;
+  return {
+    x: xStart + col * xGap,
+    y: yStart + row * yGap,
+    w: width,
+    h: height,
+    rotation: 0
+  };
 }
 
 function canStartVotingFor(item) {
@@ -1310,6 +1361,14 @@ function agendaTimeLabel(item) {
   if (item.endsAt) parts.push(`do ${dateTimeLabel(item.endsAt)}`);
   if (item.durationMinutes) parts.push(`${item.durationMinutes} min`);
   return parts.join(" ");
+}
+
+function agendaDurationFromTimes(item) {
+  if (!item.startsAt || !item.endsAt) return 0;
+  const start = new Date(item.startsAt).getTime();
+  const end = new Date(item.endsAt).getTime();
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return 0;
+  return Math.round((end - start) / 60000);
 }
 
 function dateTimeLabel(value) {

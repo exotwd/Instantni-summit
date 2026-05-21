@@ -327,8 +327,8 @@ button:disabled {
 }
 
 .stage-wrap {
-  margin-top: 14px;
-  padding: 14px;
+  margin-top: 12px;
+  padding: 12px;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: calc(var(--radius) + 2px);
@@ -345,6 +345,19 @@ button:disabled {
   background:
     radial-gradient(circle, rgba(15, 23, 42, .085) 1px, transparent 1px) 0 0 / 22px 22px,
     linear-gradient(180deg, #ffffff, #f8fafc);
+}
+
+.stage-caption {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+
+.unified-voting-stage .stage {
+  height: 430px;
 }
 
 html.flag-emoji-polyfill,
@@ -398,11 +411,11 @@ html.flag-emoji-polyfill body {
 }
 
 .compact-stage {
-  height: 430px;
+  height: 320px;
 }
 
 .debate-stage {
-  height: 520px;
+  height: 340px;
 }
 
 .seat {
@@ -455,6 +468,32 @@ html.flag-emoji-polyfill body {
 .speaker-seat:hover {
   border-color: var(--blue);
   background: #eff6ff;
+}
+
+.overview-seat {
+  padding: 5px;
+  border-radius: 12px;
+}
+
+.overview-seat .seat-flag {
+  font-size: 20px;
+  margin-bottom: 1px;
+}
+
+.overview-seat .seat-code {
+  font-size: 15px;
+}
+
+.overview-seat .seat-name {
+  display: none;
+}
+
+.overview-seat .seat-vote {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 9px;
 }
 
 .debate-seat {
@@ -654,6 +693,103 @@ html.flag-emoji-polyfill body {
 .agenda-item .actions {
   margin-top: 0;
   flex-shrink: 0;
+}
+
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.section-head h2 {
+  margin: 0;
+}
+
+.agenda-summary {
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.agenda-summary strong {
+  color: var(--text);
+}
+
+.agenda-timeline {
+  display: grid;
+  gap: 8px;
+}
+
+.agenda-timeline-item {
+  display: grid;
+  grid-template-columns: 92px 1fr;
+  gap: 6px 10px;
+  align-items: center;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--blue);
+  border-radius: var(--radius-sm);
+  background: #fff;
+}
+
+.agenda-time {
+  color: var(--blue);
+  font-size: 12px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.agenda-track {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e8edf5;
+}
+
+.agenda-track span {
+  display: block;
+  height: 100%;
+  min-width: 18%;
+  border-radius: inherit;
+  background: var(--blue);
+}
+
+.agenda-copy {
+  grid-column: 1 / -1;
+}
+
+.agenda-copy strong {
+  display: block;
+  font-size: 15px;
+}
+
+.agenda-copy small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.agenda-break,
+.agenda-caucus {
+  border-left-color: var(--teal);
+}
+
+.agenda-break .agenda-track span,
+.agenda-caucus .agenda-track span {
+  background: var(--teal);
+}
+
+.agenda-voting {
+  border-left-color: var(--amber);
+}
+
+.agenda-voting .agenda-track span {
+  background: var(--amber);
 }
 
 .stage [data-layout-seat].attendance-present,
