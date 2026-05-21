@@ -12,13 +12,21 @@ export async function api(path, options = {}) {
     } catch {
       const preview = text.replace(/\s+/g, " ").slice(0, 180);
       if (res.status === 404) {
-        throw new Error("Server běží se starým backendem nebo nezná tuto API routu. Znovu sestavte binárku a restartujte mun-app.");
+        const error = new Error("Server běží se starým backendem nebo nezná tuto API routu. Znovu sestavte binárku a restartujte mun-app.");
+        error.status = res.status;
+        error.code = "not_found";
+        throw error;
       }
-      throw new Error(`Server nevrátil JSON odpověď (${res.status}). ${preview || "Prázdná odpověď."}`);
+      const error = new Error(`Server nevrátil JSON odpověď (${res.status}). ${preview || "Prázdná odpověď."}`);
+      error.status = res.status;
+      throw error;
     }
   }
   if (!res.ok) {
-    throw new Error(data?.error?.message || `Požadavek selhal (${res.status}).`);
+    const error = new Error(data?.error?.message || `Požadavek selhal (${res.status}).`);
+    error.status = res.status;
+    error.code = data?.error?.code || "";
+    throw error;
   }
   return data;
 }

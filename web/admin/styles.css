@@ -397,6 +397,14 @@ html.flag-emoji-polyfill body {
   height: 560px;
 }
 
+.compact-stage {
+  height: 430px;
+}
+
+.debate-stage {
+  height: 520px;
+}
+
 .seat {
   position: absolute;
   display: flex;
@@ -447,6 +455,32 @@ html.flag-emoji-polyfill body {
 .speaker-seat:hover {
   border-color: var(--blue);
   background: #eff6ff;
+}
+
+.debate-seat {
+  cursor: default;
+}
+
+.debate-selectable {
+  cursor: pointer;
+  border-color: var(--blue);
+  background: #eff6ff;
+  box-shadow: 0 0 0 3px rgba(0, 51, 153, .14), 0 6px 18px rgba(15, 23, 42, .12);
+}
+
+.debate-selectable:hover {
+  border-color: #00246e;
+  background: #dbeafe;
+}
+
+.debate-supporter {
+  border-color: #22c55e;
+  background: #ecfdf5;
+}
+
+.debate-opponent {
+  border-color: #ef4444;
+  background: #fef2f2;
 }
 
 .vote-for,
@@ -600,25 +634,6 @@ html.flag-emoji-polyfill body {
   padding: 10px;
 }
 
-.delegation-chip-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
-  gap: 6px;
-  margin-top: 10px;
-}
-
-.delegation-chip {
-  min-height: 36px;
-  width: 100%;
-  padding: 8px 10px;
-  text-align: left;
-  border-color: var(--line);
-  border-radius: var(--radius-sm);
-  background: #fff;
-  color: var(--text);
-  box-shadow: none;
-}
-
 .agenda-overview .agenda-row,
 .agenda-item {
   display: flex;
@@ -641,20 +656,13 @@ html.flag-emoji-polyfill body {
   flex-shrink: 0;
 }
 
-.debate-select-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 8px;
-  margin-top: 12px;
-}
-
-.stage .attendance-present,
-.stage .attendance-absent {
+.stage [data-layout-seat].attendance-present,
+.stage [data-layout-seat].attendance-absent {
   cursor: grab;
 }
 
-.stage .attendance-present:active,
-.stage .attendance-absent:active {
+.stage [data-layout-seat].attendance-present:active,
+.stage [data-layout-seat].attendance-absent:active {
   cursor: grabbing;
 }
 

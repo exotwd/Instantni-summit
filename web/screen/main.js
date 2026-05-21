@@ -13,8 +13,7 @@ window.setInterval(() => {
 
 async function init() {
   try {
-    await load();
-    connectRealtime();
+    if (await load()) connectRealtime();
   } catch {
     renderLogin();
   }
@@ -35,9 +34,15 @@ async function load(showLogin = true) {
     state = await api("/api/screen/state");
     normalizeState();
     render();
+    return true;
   } catch (err) {
-    if (showLogin) renderLogin(err.message);
-    throw err;
+    const unauthorized = err?.status === 401 || err?.code === "unauthorized";
+    if (unauthorized) {
+      if (showLogin) renderLogin(err.message);
+      return false;
+    }
+    if (!state && showLogin) renderLogin(err.message);
+    return false;
   }
 }
 

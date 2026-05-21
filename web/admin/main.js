@@ -32,8 +32,7 @@ async function init() {
   try {
     const me = await api("/api/auth/me");
     if (me.role !== "admin") throw new Error("not_admin");
-    await load();
-    connectRealtime();
+    if (await load()) connectRealtime();
   } catch {
     renderLogin();
   }
@@ -54,9 +53,17 @@ async function load(showErrors = true) {
     state = await api("/api/admin/state");
     normalizeState();
     render();
+    return true;
   } catch (err) {
-    if (showErrors) showToast(err.message);
-    renderLogin(err.message);
+    if (isUnauthorizedError(err)) {
+      if (showErrors) showToast(err.message);
+      state = null;
+      renderLogin(err.message);
+      return false;
+    }
+    if (showErrors || state) showToast(err.message);
+    if (!state) renderLogin(err.message);
+    return false;
   }
 }
 
@@ -106,8 +113,7 @@ function renderLogin(message = "") {
       if (me.role !== "admin") {
         throw new Error("Přihlášení proběhlo, ale prohlížeč neuložil session cookie. Pokud jedeš přes HTTP, nastav COOKIE_SECURE=false.");
       }
-      await load();
-      connectRealtime();
+      if (await load()) connectRealtime();
     } catch (err) {
       error.textContent = err.message || "Přihlášení selhalo.";
       button.disabled = false;
@@ -222,7 +228,7 @@ function renderSpeakerPanel(mode = "full") {
           <ol class="queue-list">${state.speakers.queue.length ? state.speakers.queue.map((item) => `<li data-remove-speaker="${item.id}">${flagName(item.delegation)}</li>`).join("") : "<li>Pořadník je prázdný.</li>"}</ol>
         </div>
       </div>
-      ${compact ? `<div class="delegation-chip-grid">${state.delegations.filter((item) => item.present).map((delegation) => `<button class="save delegation-chip" data-speaker-seat="${delegation.id}">${flagName(delegation)}</button>`).join("")}</div>` : `<div class="stage-wrap"><div class="stage speaker-stage">${renderChairMarker()}${renderSeats("speaker")}</div></div>`}
+      <div class="stage-wrap"><div class="stage speaker-stage ${compact ? "compact-stage" : ""}">${renderChairMarker()}${renderSeats("speaker")}</div></div>
     </div>`;
 }
 
@@ -293,10 +299,8 @@ function renderDebatePanel() {
         <div><strong>Odpůrce</strong><br>${debate.opponent ? flagName(debate.opponent) : "nevybrán"}</div>
       </div>
       <p>${esc(debate.amendment?.text || "")}</p>
-      ${(session.phase === "select_supporter" || session.phase === "select_opponent") ? `
-        <div class="debate-select-grid">
-          ${state.delegations.filter((item) => item.present).map((delegation) => `<button class="save" data-debate-select="${delegation.id}">${flagName(delegation)}</button>`).join("")}
-        </div>` : ""}
+      <div class="voting-status">${debateInstruction(session.phase)}</div>
+      <div class="stage-wrap"><div class="stage debate-stage compact-stage">${renderChairMarker()}${renderSeats("debate")}</div></div>
       <div class="actions">
         <button class="save" data-action="debate-next">Další krok</button>
         ${session.phase === "ready_to_vote" && debate.amendment ? `<button class="vote-button" data-start-voting="${debate.amendment.id}">Spustit hlasování</button>` : ""}
@@ -568,6 +572,31 @@ function renderSeats(mode) {
     if (mode === "speaker") {
       classes.push("speaker-seat");
       data = `data-speaker-seat="${d.id}"`;
+    } else if (mode === "debate") {
+      const debate = state.debate || {};
+      const phase = debate.session?.phase || "";
+      const supporterId = Number(debate.supporter?.id || debate.session?.supporterDelegationId || 0);
+      const opponentId = Number(debate.opponent?.id || debate.session?.opponentDelegationId || 0);
+      const selectingSupporter = phase === "select_supporter";
+      const selectingOpponent = phase === "select_opponent";
+      const canSelect = d.present && (selectingSupporter || (selectingOpponent && Number(d.id) !== supporterId));
+      classes.push("debate-seat");
+      if (!d.present) classes.push("attendance-absent");
+      if (supporterId && Number(d.id) === supporterId) {
+        classes.push("debate-supporter");
+        label = `<div class="seat-vote">PODPOROVATEL</div>`;
+      } else if (opponentId && Number(d.id) === opponentId) {
+        classes.push("debate-opponent");
+        label = `<div class="seat-vote">ODPŮRCE</div>`;
+      } else if (canSelect) {
+        classes.push("debate-selectable");
+        data = `data-debate-select="${d.id}"`;
+        label = `<div class="seat-vote">${selectingSupporter ? "VYBRAT PRO" : "VYBRAT PROTI"}</div>`;
+      } else if (selectingOpponent && Number(d.id) === supporterId) {
+        label = `<div class="seat-vote">UŽ VYBRÁN</div>`;
+      } else if (selectingSupporter || selectingOpponent) {
+        label = `<div class="seat-vote">${d.present ? "NEVYBRATELNÉ" : "NEPŘÍTOMEN"}</div>`;
+      }
     } else if (mode === "voting") {
       if (vote) classes.push(`vote-${vote}`);
       data = `data-vote-seat="${d.id}"`;
@@ -632,6 +661,16 @@ function canStartVotingFor(item) {
   return item?.status === "introduced" &&
     state?.debate?.session?.phase === "ready_to_vote" &&
     Number(state?.debate?.amendment?.id || 0) === Number(item.id || 0);
+}
+
+function debateInstruction(phase) {
+  if (phase === "submitter_reading") return "Předkladatel čte návrh. Po přečtení pokračuj tlačítkem Další krok.";
+  if (phase === "select_supporter") return "Vyber podporovatele kliknutím na jeho stůl ve schématu.";
+  if (phase === "select_opponent") return "Vyber odpůrce kliknutím na jeho stůl ve schématu.";
+  if (phase === "supporter_speaking") return "Běží prostor podporovatele. Další krok spustí odpůrce nebo ukončí projevy.";
+  if (phase === "opponent_speaking") return "Běží prostor odpůrce. Další krok ukončí předhlasovací jednání.";
+  if (phase === "ready_to_vote") return "Jednání skončilo. Teď lze spustit hlasování.";
+  return "";
 }
 
 function bindActions() {
@@ -1162,8 +1201,17 @@ async function request(path, options, message = "Uloženo.") {
     await load(false);
     showToast(message);
   } catch (err) {
+    if (isUnauthorizedError(err)) {
+      state = null;
+      renderLogin(err.message);
+      return;
+    }
     showToast(err.message);
   }
+}
+
+function isUnauthorizedError(err) {
+  return err?.status === 401 || err?.code === "unauthorized";
 }
 
 function click(action, fn) {

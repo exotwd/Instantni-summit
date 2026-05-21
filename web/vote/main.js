@@ -16,9 +16,12 @@ async function init() {
     try {
       await api("/api/vote/link-login", { method: "POST", body: { token } });
       window.history.replaceState({}, document.title, "/vote");
-      await load(false);
-      connectRealtime();
-      showToast("Přihlášeno odkazem.");
+      if (await load(false)) {
+        connectRealtime();
+        showToast("Přihlášeno odkazem.");
+      } else {
+        renderLogin();
+      }
       return;
     } catch (err) {
       window.history.replaceState({}, document.title, "/vote");
@@ -27,8 +30,8 @@ async function init() {
     }
   }
   try {
-    await load(false);
-    connectRealtime();
+    if (await load(false)) connectRealtime();
+    else renderLogin();
   } catch {
     renderLogin();
   }
@@ -49,9 +52,16 @@ async function load(showLogin = true) {
     state = await api("/api/vote/state");
     normalizeState();
     renderApp();
+    return true;
   } catch (err) {
-    if (showLogin) renderLogin(err.message);
-    throw err;
+    const unauthorized = err?.status === 401 || err?.code === "unauthorized";
+    if (unauthorized) {
+      if (showLogin) renderLogin(err.message);
+      return false;
+    }
+    if (state) showToast(err.message);
+    else if (showLogin) renderLogin(err.message);
+    return false;
   }
 }
 
