@@ -29,3 +29,18 @@ make build
 ```
 
 SQLite migrace se spousti automaticky pri startu serveru. Databaze bezi ve WAL rezimu a server je zdrojem pravdy pro vsechny stavy.
+
+
+
+
+Spuštění
+cd /home/ubuntu/instantni-summit
+export PATH="$HOME/.bun/bin:/usr/local/go/bin:$PATH"
+
+go build -a -o /tmp/mun-app-new ./cmd/server
+
+sudo systemctl stop mun-app
+sudo install -m 0755 /tmp/mun-app-new /opt/mun-app/mun-app
+sudo chown munapp:munapp /opt/mun-app/mun-app
+sudo systemctl start mun-app
+sudo systemctl status mun-app --no-pager

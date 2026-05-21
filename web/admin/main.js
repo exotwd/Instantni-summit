@@ -1177,12 +1177,52 @@ async function markAllPresence(present) {
 
 async function copyVoteLink(token) {
   const link = voteLinkUrl(token);
-  if (!link) return;
-  try {
-    await navigator.clipboard.writeText(link);
+  if (!link) {
+    showToast("Odkaz není dostupný.");
+    return;
+  }
+
+  let copied = false;
+
+  if (navigator.clipboard && window.isSecureContext) {
+    try {
+      await navigator.clipboard.writeText(link);
+      copied = true;
+    } catch {
+      copied = false;
+    }
+  }
+
+  if (!copied) {
+    copied = copyTextFallback(link);
+  }
+
+  if (copied) {
     showToast("Hlasovací odkaz zkopírován.");
+  } else {
+    showToast(`Odkaz se nepodařilo zkopírovat. Zkopíruj ho ručně: ${link}`);
+  }
+}
+
+function copyTextFallback(value) {
+  const textarea = document.createElement("textarea");
+  textarea.value = value;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.top = "-1000px";
+  textarea.style.left = "-1000px";
+  textarea.style.opacity = "0";
+
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+
+  try {
+    return document.execCommand("copy");
   } catch {
-    showToast(link);
+    return false;
+  } finally {
+    textarea.remove();
   }
 }
 
