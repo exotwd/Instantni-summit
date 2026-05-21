@@ -194,13 +194,10 @@ function renderAgendaOverview() {
 
 function renderAgendaTimelineItem(item) {
   const duration = Number(item.durationMinutes || agendaDurationFromTimes(item) || 0);
-  const width = clamp(duration ? duration * 1.55 : 26, 22, 100);
   return `
     <div class="agenda-timeline-item agenda-${esc(item.type || "other")}">
-      <div class="agenda-time">${agendaTimeLabel(item) || "bez času"}</div>
-      <div class="agenda-track">
-        <span style="width:${width}%"></span>
-      </div>
+      <div class="agenda-dot" aria-hidden="true"></div>
+      <div class="agenda-time">${agendaStartLabel(item) || "bez času"}</div>
       <div class="agenda-copy">
         <strong>${esc(item.title)}</strong>
         <small>${agendaTypeLabel(item.type)}${duration ? ` · ${duration} min` : ""}</small>
@@ -514,6 +511,7 @@ function renderSettingsPanel() {
         <button class="save">Změnit screen PIN</button>
       </form>
     </div>
+    ${renderDataManagementPanel()}
     <div class="card danger-zone">
       <h2>Reset dat</h2>
       <p>Reset živých dat smaže pořadník, hlasování a přestávky. Reset všeho navíc vytvoří zálohu databáze a vrátí výchozí delegace.</p>
@@ -522,6 +520,145 @@ function renderSettingsPanel() {
         <button class="reject" data-action="reset-all">Resetovat vše</button>
       </div>
     </div>`;
+}
+
+function renderDataManagementPanel() {
+  return `
+    <div class="card data-management">
+      <div class="section-head">
+        <div>
+          <h2>Správa uložených dat</h2>
+          <p>Hromadně upravuj data přímo v tabulkách. Mazání je dostupné u agendy a PN, úplné vyčištění aplikace je níže v resetu.</p>
+        </div>
+      </div>
+      ${renderDataDelegationsTable()}
+      ${renderDataAgendaTable()}
+      ${renderDataAmendmentsTable()}
+      ${renderDataRuntimeTable()}
+    </div>`;
+}
+
+function renderDataDelegationsTable() {
+  const rows = state.attendance.delegations || [];
+  return `
+    <section class="data-section">
+      <div class="section-head tight">
+        <div>
+          <h3>Delegace, prezence a účastníci</h3>
+          <p>Název, kódy, přítomnost a osobní údaje delegátů.</p>
+        </div>
+        <button class="approve" data-save-data-delegations>Uložit delegace</button>
+      </div>
+      <div class="data-table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr><th>Delegace</th><th>Kód</th><th>Vlajka</th><th>Přítomen</th><th>Kód povolen</th><th>Účastník</th><th>E-mail</th><th>Spoludelegát</th><th>E-mail 2</th><th>Poznámka</th></tr>
+          </thead>
+          <tbody>${rows.map((d) => {
+            const participant = d.participant || {};
+            return `
+              <tr data-data-delegation-row="${d.id}">
+                <td><input name="name" value="${esc(d.name || "")}"></td>
+                <td><input name="code" value="${esc(d.code || "")}"></td>
+                <td><input name="flag" value="${esc(d.flag || "")}"></td>
+                <td class="check-cell"><input name="present" type="checkbox" ${d.present ? "checked" : ""}></td>
+                <td class="check-cell"><input name="accessCodeEnabled" type="checkbox" ${d.accessCodeEnabled ? "checked" : ""}></td>
+                <td><input name="participantName" value="${esc(participant.name || "")}"></td>
+                <td><input name="participantEmail" value="${esc(participant.email || "")}"></td>
+                <td><input name="coDelegateName" value="${esc(participant.coDelegateName || "")}"></td>
+                <td><input name="coDelegateEmail" value="${esc(participant.coDelegateEmail || "")}"></td>
+                <td><input name="note" value="${esc(participant.note || "")}"></td>
+              </tr>`;
+          }).join("")}</tbody>
+        </table>
+      </div>
+    </section>`;
+}
+
+function renderDataAgendaTable() {
+  const rows = state.agenda || [];
+  return `
+    <section class="data-section">
+      <div class="section-head tight">
+        <div>
+          <h3>Agenda</h3>
+          <p>Časy jsou ve 24h formátu. Bod bez konce může mít jen délku v minutách.</p>
+        </div>
+        <button class="approve" data-save-data-agenda>Uložit agendu</button>
+      </div>
+      <div class="data-table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr><th>Pořadí</th><th>Název</th><th>Typ</th><th>Od</th><th>Do</th><th>Min</th><th>Poznámka</th><th>Akce</th></tr>
+          </thead>
+          <tbody>${rows.length ? rows.map((row) => `
+            <tr data-data-agenda-row="${row.id}">
+              <td><input name="displayOrder" type="number" value="${esc(row.displayOrder || 0)}"></td>
+              <td><input name="title" value="${esc(row.title || "")}"></td>
+              <td><select name="type">${agendaTypeOptions(row.type)}</select></td>
+              <td><input name="startsAt" type="time" value="${esc(timeInputValue(row.startsAt))}"></td>
+              <td><input name="endsAt" type="time" value="${esc(timeInputValue(row.endsAt))}"></td>
+              <td><input name="durationMinutes" type="number" min="0" value="${esc(row.durationMinutes || "")}"></td>
+              <td><input name="note" value="${esc(row.note || "")}"></td>
+              <td><button class="reject compact-button" data-delete-agenda="${row.id}">Smazat</button></td>
+            </tr>`).join("") : `<tr><td colspan="8" class="muted">Agenda je prázdná.</td></tr>`}</tbody>
+        </table>
+      </div>
+    </section>`;
+}
+
+function renderDataAmendmentsTable() {
+  const rows = state.amendments || [];
+  return `
+    <section class="data-section">
+      <div class="section-head tight">
+        <div>
+          <h3>Pozměňovací návrhy</h3>
+          <p>Vyřazení PN ho přesune mimo aktivní workflow. Schválené a odhlasované PN nemaž natvrdo.</p>
+        </div>
+        <button class="approve" data-save-data-amendments>Uložit PN</button>
+      </div>
+      <div class="data-table-wrap">
+        <table class="data-table amendments-data-table">
+          <thead>
+            <tr><th>PN</th><th>Stav</th><th>Typ</th><th>Cíl</th><th>Předkladatel</th><th>Garanti</th><th>Text</th><th>Akce</th></tr>
+          </thead>
+          <tbody>${rows.length ? rows.map((item) => `
+            <tr data-data-amendment-row="${item.id}">
+              <td><strong>PN ${esc(item.number || "")}</strong></td>
+              <td><span class="badge">${esc(statusLabel(item.status))}</span></td>
+              <td><select name="type">${amendmentTypeOptions(item.type)}</select></td>
+              <td><select name="targetPointId"><option value="">Bez cíle</option>${resolutionOptionsWithSelected(item.targetPointId)}</select></td>
+              <td><input name="submitterName" value="${esc(item.submitterName || "")}"></td>
+              <td><input name="guarantorsText" value="${esc(item.guarantorsText || "")}"></td>
+              <td><textarea name="text">${esc(item.text || "")}</textarea></td>
+              <td><button class="reject compact-button" data-reject="${item.id}">Vyřadit</button></td>
+            </tr>`).join("") : `<tr><td colspan="8" class="muted">Žádné PN nejsou uložené.</td></tr>`}</tbody>
+        </table>
+      </div>
+    </section>`;
+}
+
+function renderDataRuntimeTable() {
+  const vote = state.voting.session;
+  const debate = state.debate.session;
+  const speakerCount = (state.speakers.queue || []).length + (state.speakers.current ? 1 : 0) + (state.speakers.reactions || []).length;
+  return `
+    <section class="data-section">
+      <div class="section-head tight">
+        <div>
+          <h3>Živá data aplikace</h3>
+          <p>Rychlá kontrola stavů, které se mažou resetem živých dat.</p>
+        </div>
+        <button class="reject" data-action="reset-live">Resetovat živá data</button>
+      </div>
+      <div class="runtime-grid">
+        <div><strong>Hlasování</strong><span>${vote ? `PN ${esc(vote.amendmentId)} · ${esc(vote.status)}` : "neprobíhá"}</span></div>
+        <div><strong>Jednání o PN</strong><span>${debate ? esc(debate.phase || "") : "neprobíhá"}</span></div>
+        <div><strong>Pořadník</strong><span>${speakerCount} položek</span></div>
+        <div><strong>Přestávka</strong><span>${state.break?.active ? esc(state.break.title || "běží") : "neprobíhá"}</span></div>
+      </div>
+    </section>`;
 }
 
 function renderAttendanceTable() {
@@ -591,7 +728,7 @@ function renderDelegateEditor() {
 
 function renderSeats(mode) {
   return state.delegations.map((d, index) => {
-    const seat = mode === "layout" ? (d.seat || defaultSeat(index)) : overviewSeat(index, state.delegations.length);
+    const seat = d.seat || defaultSeat(index);
     const vote = voteForDelegation(d.id);
     const classes = ["seat"];
     if (mode !== "layout") classes.push("overview-seat");
@@ -849,6 +986,12 @@ function bindActions() {
   const settingsForm = app.querySelector("[data-form=settings]");
   if (settingsForm) settingsForm.onsubmit = submitSettings;
   app.querySelectorAll("[data-form=pin]").forEach((form) => form.onsubmit = submitPin);
+  const saveDataDelegations = app.querySelector("[data-save-data-delegations]");
+  if (saveDataDelegations) saveDataDelegations.onclick = saveDataDelegationsTable;
+  const saveDataAgenda = app.querySelector("[data-save-data-agenda]");
+  if (saveDataAgenda) saveDataAgenda.onclick = saveDataAgendaTable;
+  const saveDataAmendments = app.querySelector("[data-save-data-amendments]");
+  if (saveDataAmendments) saveDataAmendments.onclick = saveDataAmendmentsTable;
   app.querySelectorAll("[data-delete-agenda]").forEach((button) => button.onclick = () => request(`/api/agenda/${button.dataset.deleteAgenda}`, { method: "DELETE" }));
   app.querySelectorAll("[data-edit-agenda]").forEach((button) => button.onclick = () => { editingAgendaId = Number(button.dataset.editAgenda); panel = "agenda"; render(); });
   click("reset-live", () => confirm("Opravdu resetovat živá data?") && post("/api/settings/reset-live", {}));
@@ -928,6 +1071,107 @@ async function saveDelegateDetails() {
   } catch (err) {
     showToast(err.message);
   }
+}
+
+async function saveDataDelegationsTable(event) {
+  event.preventDefault();
+  const rows = Array.from(app.querySelectorAll("[data-data-delegation-row]"));
+  try {
+    for (const row of rows) {
+      const id = Number(row.dataset.dataDelegationRow);
+      const existing = state.attendance.delegations.find((item) => item.id === id) || state.delegations.find((item) => item.id === id) || {};
+      const delegation = {
+        ...existing,
+        id,
+        name: dataValue(row, "name"),
+        code: dataValue(row, "code"),
+        flag: dataValue(row, "flag"),
+        accessCodeEnabled: dataChecked(row, "accessCodeEnabled"),
+        displayOrder: Number(existing.displayOrder || 0)
+      };
+      const participant = {
+        delegationId: id,
+        name: dataValue(row, "participantName"),
+        email: dataValue(row, "participantEmail"),
+        coDelegateName: dataValue(row, "coDelegateName"),
+        coDelegateEmail: dataValue(row, "coDelegateEmail"),
+        note: dataValue(row, "note")
+      };
+      await api(`/api/delegations/${id}`, { method: "PUT", body: delegation });
+      await api("/api/attendance/participant", { method: "POST", body: participant });
+      await api("/api/attendance/access-code-enabled", { method: "POST", body: { delegationId: id, enabled: delegation.accessCodeEnabled } });
+      if (dataChecked(row, "present") !== !!existing.present) {
+        await api(dataChecked(row, "present") ? "/api/attendance/check-in" : "/api/attendance/check-out", { method: "POST", body: { delegationId: id } });
+      }
+    }
+    await load(false);
+    showToast("Delegace, prezence a účastníci uloženi.");
+  } catch (err) {
+    showToast(err.message);
+  }
+}
+
+async function saveDataAgendaTable(event) {
+  event.preventDefault();
+  const rows = Array.from(app.querySelectorAll("[data-data-agenda-row]"));
+  try {
+    for (const row of rows) {
+      const id = Number(row.dataset.dataAgendaRow);
+      await api(`/api/agenda/${id}`, { method: "PUT", body: agendaRowBody(row) });
+    }
+    await load(false);
+    showToast("Agenda uložena.");
+  } catch (err) {
+    showToast(err.message);
+  }
+}
+
+async function saveDataAmendmentsTable(event) {
+  event.preventDefault();
+  const rows = Array.from(app.querySelectorAll("[data-data-amendment-row]"));
+  try {
+    for (const row of rows) {
+      const id = Number(row.dataset.dataAmendmentRow);
+      const existing = state.amendments.find((item) => item.id === id) || {};
+      await api(`/api/amendments/${id}`, {
+        method: "PUT",
+        body: {
+          ...existing,
+          id,
+          type: dataValue(row, "type"),
+          targetPointId: dataValue(row, "targetPointId") ? Number(dataValue(row, "targetPointId")) : null,
+          submitterName: dataValue(row, "submitterName"),
+          guarantorsText: dataValue(row, "guarantorsText"),
+          text: dataValue(row, "text"),
+          status: existing.status || "submitted"
+        }
+      });
+    }
+    await load(false);
+    showToast("Pozměňovací návrhy uloženy.");
+  } catch (err) {
+    showToast(err.message);
+  }
+}
+
+function agendaRowBody(row) {
+  return {
+    title: dataValue(row, "title"),
+    type: dataValue(row, "type"),
+    startsAt: agendaTimeToISO(dataValue(row, "startsAt")),
+    endsAt: agendaTimeToISO(dataValue(row, "endsAt")),
+    durationMinutes: dataValue(row, "durationMinutes") ? Number(dataValue(row, "durationMinutes")) : null,
+    note: dataValue(row, "note"),
+    displayOrder: dataValue(row, "displayOrder") ? Number(dataValue(row, "displayOrder")) : 0
+  };
+}
+
+function dataValue(row, name) {
+  return row.querySelector(`[name="${name}"]`)?.value?.trim() || "";
+}
+
+function dataChecked(row, name) {
+  return !!row.querySelector(`[name="${name}"]`)?.checked;
 }
 
 function agendaFormBody(form) {
@@ -1361,6 +1605,10 @@ function agendaTimeLabel(item) {
   if (item.endsAt) parts.push(`do ${dateTimeLabel(item.endsAt)}`);
   if (item.durationMinutes) parts.push(`${item.durationMinutes} min`);
   return parts.join(" ");
+}
+
+function agendaStartLabel(item) {
+  return item.startsAt ? dateTimeLabel(item.startsAt) : "";
 }
 
 function agendaDurationFromTimes(item) {
