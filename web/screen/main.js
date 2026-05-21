@@ -285,7 +285,7 @@ function renderSeatMap(mode, large) {
     } else {
       classes.push(delegation.present ? "present" : "absent");
     }
-    return `<div class="${classes.join(" ")}" style="left:${seat.x}%;top:${seat.y}%;width:${seat.w}%;height:${seat.h}%;" title="${esc(delegation.name)}"><div class="seat-flag-map">${esc(delegation.flag || delegation.code || "")}</div></div>`;
+    return `<div class="${classes.join(" ")}" style="left:${seat.x}%;top:${seat.y}%;width:${seat.w}%;height:${seat.h}%;transform:rotate(${seat.rotation || 0}deg);" title="${esc(delegation.name)}"><div class="seat-flag-map">${esc(delegation.flag || delegation.code || "")}</div></div>`;
   }).join("");
 }
 
@@ -306,11 +306,13 @@ function chairSeat() {
 }
 
 function projectionChairSeat(seat) {
+  const w = Number(seat.w || 24);
+  const h = Number(seat.h || 7);
   return {
-    x: clamp(Number(seat.x || 0), 0, 100 - Number(seat.w || 24)),
-    y: clamp(100 - Number(seat.y || 0) - Number(seat.h || 7), 0, 100 - Number(seat.h || 7)),
-    w: Number(seat.w || 24),
-    h: Number(seat.h || 7),
+    x: clamp(Number(seat.x || 0), 0, 100 - w),
+    y: clamp(Number(seat.y || 0), 0, 100 - h),
+    w,
+    h,
     rotation: Number(seat.rotation || 0)
   };
 }
@@ -323,11 +325,13 @@ function numberSetting(value, fallback) {
 function projectionSeat(seat, large) {
   const baseW = Number(seat.w || 10);
   const baseH = Number(seat.h || 10);
-  const w = Math.min(baseW * (large ? 1.42 : 1.26), large ? 20 : 17);
-  const h = Math.min(baseH * (large ? 1.12 : 1.04), large ? 13 : 10.8);
-  const x = clamp(Number(seat.x || 0) - (w - baseW) / 2, 0, 100 - w);
-  const y = clamp(100 - Number(seat.y || 0) - baseH - (h - baseH) / 2, 0, 100 - h);
-  return { x, y, w, h };
+  return {
+    x: clamp(Number(seat.x || 0), 0, 100 - baseW),
+    y: clamp(Number(seat.y || 0), 0, 100 - baseH),
+    w: baseW,
+    h: baseH,
+    rotation: Number(seat.rotation || 0)
+  };
 }
 
 function renderResolutionPoints() {

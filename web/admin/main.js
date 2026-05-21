@@ -458,7 +458,6 @@ function renderAgendaPanelV2() {
         <div><strong>Název</strong><input name="title" value="${esc(item?.title || "")}" placeholder="Název bodu" required></div>
         <div><strong>Typ</strong><select name="type">${agendaTypeOptions(item?.type || "session")}</select></div>
         <div><strong>Začátek</strong><input name="startsAt" type="time" value="${timeInputValue(item?.startsAt)}"></div>
-        <div><strong>Konec</strong><input name="endsAt" type="time" value="${timeInputValue(item?.endsAt)}"></div>
         <div><strong>Délka v minutách</strong><input name="durationMinutes" type="number" min="1" value="${esc(item?.durationMinutes || "")}" placeholder="např. 20"></div>
         <div><strong>Pořadí</strong><input name="displayOrder" type="number" min="0" value="${esc(item?.displayOrder || "")}"></div>
       </div>
@@ -474,7 +473,7 @@ function renderAgendaPanelV2() {
         <div class="item agenda-item">
           <div>
             <b>${esc(row.title)}</b><br>
-            <span class="muted">${agendaTypeLabel(row.type)}${agendaTimeLabel(row) ? " · " + agendaTimeLabel(row) : ""}</span>
+            <span class="muted">${agendaTypeLabel(row.type)}${agendaStartLabel(row) ? " · " + agendaStartLabel(row) : ""}${row.durationMinutes ? " · " + row.durationMinutes + " min" : ""}</span>
             ${row.note ? `<p>${esc(row.note)}</p>` : ""}
           </div>
           <div class="actions">
@@ -589,7 +588,7 @@ function renderDataAgendaTable() {
       <div class="data-table-wrap">
         <table class="data-table">
           <thead>
-            <tr><th>Pořadí</th><th>Název</th><th>Typ</th><th>Od</th><th>Do</th><th>Min</th><th>Poznámka</th><th>Akce</th></tr>
+            <tr><th>Pořadí</th><th>Název</th><th>Typ</th><th>Začátek</th><th>Min</th><th>Poznámka</th><th>Akce</th></tr>
           </thead>
           <tbody>${rows.length ? rows.map((row) => `
             <tr data-data-agenda-row="${row.id}">
@@ -597,11 +596,10 @@ function renderDataAgendaTable() {
               <td><input name="title" value="${esc(row.title || "")}"></td>
               <td><select name="type">${agendaTypeOptions(row.type)}</select></td>
               <td><input name="startsAt" type="time" value="${esc(timeInputValue(row.startsAt))}"></td>
-              <td><input name="endsAt" type="time" value="${esc(timeInputValue(row.endsAt))}"></td>
               <td><input name="durationMinutes" type="number" min="0" value="${esc(row.durationMinutes || "")}"></td>
               <td><input name="note" value="${esc(row.note || "")}"></td>
               <td><button class="reject compact-button" data-delete-agenda="${row.id}">Smazat</button></td>
-            </tr>`).join("") : `<tr><td colspan="8" class="muted">Agenda je prázdná.</td></tr>`}</tbody>
+            </tr>`).join("") : `<tr><td colspan="7" class="muted">Agenda je prázdná.</td></tr>`}</tbody>
         </table>
       </div>
     </section>`;
@@ -642,7 +640,7 @@ function renderDataAmendmentsTable() {
 function renderDataRuntimeTable() {
   const vote = state.voting.session;
   const debate = state.debate.session;
-  const speakerCount = (state.speakers.queue || []).length + (state.speakers.current ? 1 : 0) + (state.speakers.reactions || []).length;
+  const speakerCount = (state.speakers.queue || []).length + (state.speakers.currentSpeaker ? 1 : 0) + (state.speakers.reactions || []).length;
   return `
     <section class="data-section">
       <div class="section-head tight">
@@ -826,26 +824,6 @@ function numberSetting(value, fallback) {
   return Number.isFinite(number) ? number : fallback;
 }
 
-function overviewSeat(index, count) {
-  const columns = count <= 18 ? 6 : 9;
-  const rows = Math.ceil(count / columns);
-  const row = Math.floor(index / columns);
-  const col = index % columns;
-  const width = count <= 18 ? 11.2 : 8.7;
-  const height = count <= 18 ? 9.2 : 8.2;
-  const xStart = count <= 18 ? 13 : 7;
-  const xGap = (100 - xStart * 2 - width) / Math.max(columns - 1, 1);
-  const yStart = rows <= 2 ? 22 : 14;
-  const yGap = rows <= 2 ? 22 : 15.5;
-  return {
-    x: xStart + col * xGap,
-    y: yStart + row * yGap,
-    w: width,
-    h: height,
-    rotation: 0
-  };
-}
-
 function canStartVotingFor(item) {
   return item?.status === "introduced" &&
     state?.debate?.session?.phase === "ready_to_vote" &&
@@ -994,10 +972,14 @@ function bindActions() {
   if (saveDataAmendments) saveDataAmendments.onclick = saveDataAmendmentsTable;
   app.querySelectorAll("[data-delete-agenda]").forEach((button) => button.onclick = () => request(`/api/agenda/${button.dataset.deleteAgenda}`, { method: "DELETE" }));
   app.querySelectorAll("[data-edit-agenda]").forEach((button) => button.onclick = () => { editingAgendaId = Number(button.dataset.editAgenda); panel = "agenda"; render(); });
-  click("reset-live", () => confirm("Opravdu resetovat živá data?") && post("/api/settings/reset-live", {}));
-  click("reset-all", () => {
+  app.querySelectorAll('[data-action="reset-live"]').forEach((button) => {
+    button.onclick = () => confirm("Opravdu resetovat živá data?") && post("/api/settings/reset-live", {});
+  });
+  app.querySelectorAll('[data-action="reset-all"]').forEach((button) => {
+    button.onclick = () => {
     const text = prompt("Pro reset všeho napiš RESET ALL");
     if (text) post("/api/settings/reset-all", { confirm: text });
+    };
   });
 }
 
@@ -1159,7 +1141,7 @@ function agendaRowBody(row) {
     title: dataValue(row, "title"),
     type: dataValue(row, "type"),
     startsAt: agendaTimeToISO(dataValue(row, "startsAt")),
-    endsAt: agendaTimeToISO(dataValue(row, "endsAt")),
+    endsAt: null,
     durationMinutes: dataValue(row, "durationMinutes") ? Number(dataValue(row, "durationMinutes")) : null,
     note: dataValue(row, "note"),
     displayOrder: dataValue(row, "displayOrder") ? Number(dataValue(row, "displayOrder")) : 0
@@ -1176,13 +1158,12 @@ function dataChecked(row, name) {
 
 function agendaFormBody(form) {
   const startsAt = agendaTimeToISO(form.startsAt.value);
-  const endsAt = agendaTimeToISO(form.endsAt.value);
   const durationMinutes = form.durationMinutes.value ? Number(form.durationMinutes.value) : null;
   return {
     title: form.title.value,
     type: form.type.value,
     startsAt,
-    endsAt,
+    endsAt: null,
     durationMinutes,
     note: form.note.value,
     displayOrder: form.displayOrder.value ? Number(form.displayOrder.value) : 0
@@ -1571,6 +1552,18 @@ function defaultSeat(index) {
 
 function resolutionOptions() {
   return (state.resolution.points || []).map((point) => `<option value="${point.id}">${point.number}. ${esc(shorten(point.text, 90))}</option>`).join("");
+}
+
+function resolutionOptionsWithSelected(selected) {
+  return (state.resolution.points || []).map((point) => `<option value="${point.id}" ${Number(selected || 0) === Number(point.id) ? "selected" : ""}>${point.number}. ${esc(shorten(point.text, 90))}</option>`).join("");
+}
+
+function amendmentTypeOptions(selected) {
+  return [
+    ["add", "Přidat bod"],
+    ["update", "Upravit bod"],
+    ["remove", "Odstranit bod"]
+  ].map(([value, label]) => `<option value="${value}" ${selected === value ? "selected" : ""}>${label}</option>`).join("");
 }
 
 function option(value, label, selected) {

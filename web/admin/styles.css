@@ -722,74 +722,92 @@ html.flag-emoji-polyfill body {
 }
 
 .agenda-timeline {
+  position: relative;
   display: grid;
-  gap: 8px;
+  gap: 0;
+  padding-left: 16px;
+}
+
+.agenda-timeline::before {
+  content: "";
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  left: 5px;
+  width: 2px;
+  border-radius: 999px;
+  background: #dbe4f0;
 }
 
 .agenda-timeline-item {
+  --agenda-color: var(--blue);
+  position: relative;
   display: grid;
-  grid-template-columns: 92px 1fr;
-  gap: 6px 10px;
-  align-items: center;
-  padding: 9px 10px;
-  border: 1px solid var(--line);
-  border-left: 4px solid var(--blue);
-  border-radius: var(--radius-sm);
-  background: #fff;
+  grid-template-columns: 54px 1fr;
+  gap: 10px;
+  align-items: start;
+  padding: 8px 0 12px 0;
+  border: 0;
+  background: transparent;
 }
 
 .agenda-time {
+  min-width: 0;
   color: var(--blue);
-  font-size: 12px;
-  font-weight: 850;
+  font-size: 13px;
+  font-weight: 900;
   white-space: nowrap;
 }
 
-.agenda-track {
-  height: 8px;
-  overflow: hidden;
+.agenda-dot {
+  position: absolute;
+  top: 13px;
+  left: -15px;
+  width: 10px;
+  height: 10px;
+  border: 2px solid #fff;
   border-radius: 999px;
-  background: #e8edf5;
-}
-
-.agenda-track span {
-  display: block;
-  height: 100%;
-  min-width: 18%;
-  border-radius: inherit;
   background: var(--blue);
+  box-shadow: 0 0 0 2px var(--blue);
 }
 
 .agenda-copy {
-  grid-column: 1 / -1;
+  min-width: 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
 }
 
 .agenda-copy strong {
   display: block;
+  overflow-wrap: anywhere;
   font-size: 15px;
+  line-height: 1.2;
 }
 
 .agenda-copy small {
+  display: block;
+  margin-top: 3px;
   color: var(--muted);
   font-size: 12px;
+  line-height: 1.25;
 }
 
 .agenda-break,
 .agenda-caucus {
-  border-left-color: var(--teal);
-}
-
-.agenda-break .agenda-track span,
-.agenda-caucus .agenda-track span {
-  background: var(--teal);
+  --agenda-color: var(--teal);
 }
 
 .agenda-voting {
-  border-left-color: var(--amber);
+  --agenda-color: var(--amber);
 }
 
-.agenda-voting .agenda-track span {
-  background: var(--amber);
+.agenda-timeline-item .agenda-dot {
+  background: var(--agenda-color);
+  box-shadow: 0 0 0 2px var(--agenda-color);
+}
+
+.agenda-timeline-item .agenda-time {
+  color: var(--agenda-color);
 }
 
 .stage [data-layout-seat].attendance-present,
@@ -840,6 +858,132 @@ html.flag-emoji-polyfill body {
   border-bottom: 1px solid var(--line);
   text-align: left;
   vertical-align: top;
+}
+
+.data-management {
+  display: grid;
+  gap: 16px;
+}
+
+.data-section {
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.data-section:first-of-type {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.section-head.tight {
+  align-items: flex-start;
+}
+
+.section-head h3 {
+  margin: 0 0 4px;
+  font-size: 18px;
+}
+
+.section-head p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.data-table-wrap {
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: #fff;
+}
+
+.data-table {
+  width: 100%;
+  min-width: 1180px;
+  border-collapse: collapse;
+}
+
+.data-table th,
+.data-table td {
+  padding: 8px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+
+.data-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f8fafc;
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+
+.data-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.data-table input,
+.data-table select,
+.data-table textarea {
+  min-width: 120px;
+  padding: 8px 9px;
+  border-radius: 10px;
+  font-size: 13px;
+}
+
+.data-table textarea {
+  width: 280px;
+  min-height: 78px;
+  resize: vertical;
+}
+
+.data-table .check-cell {
+  text-align: center;
+}
+
+.data-table .check-cell input {
+  min-width: 0;
+  width: 20px;
+  height: 20px;
+}
+
+.amendments-data-table {
+  min-width: 1380px;
+}
+
+.runtime-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+}
+
+.runtime-grid div {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+}
+
+.runtime-grid strong,
+.runtime-grid span {
+  display: block;
+}
+
+.runtime-grid strong {
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+
+.runtime-grid span {
+  font-weight: 800;
 }
 
 .attendance-code {
