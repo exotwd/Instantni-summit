@@ -135,6 +135,7 @@ function render() {
         ${panels.map(([id, label]) => `<button class="reload ${panel === id ? "active" : ""}" data-panel="${id}">${label}</button>`).join("")}
         <button class="reload" data-open-screen>Otevřít obrazovku</button>
         <button class="save" data-action="logout">Odhlásit</button>
+        ${renderTopBreakControls()}
         <span id="status">${statusText()}</span>
       </div>
       ${state.settings.defaultsWarning ? `<div class="warning">Výchozí PINy jsou stále aktivní. Změň je v nastavení.</div>` : ""}
@@ -152,6 +153,17 @@ function renderPanel() {
   if (panel === "agenda") return renderAgendaPanelV2();
   if (panel === "settings") return renderSettingsPanel();
   return renderAmendmentsPanel();
+}
+
+function renderTopBreakControls() {
+  return `
+    <div class="top-break-controls" aria-label="Ovládání přestávky">
+      <span>Přestávka</span>
+      <input id="breakMinutes" type="number" min="1" max="180" value="5" title="Minuty">
+      <button class="caucus-button" data-break-start="caucus">Kuloár</button>
+      <button class="coffee-button" data-break-start="coffee_break">Káva</button>
+      <button class="save" data-action="end-break">Stop</button>
+    </div>`;
 }
 
 function renderDashboardPanel() {
@@ -285,16 +297,8 @@ function renderBreakPanel(mode = "full") {
   const compact = mode === "compact";
   return `
     <div class="card break-panel ${compact ? "compact-card" : ""}">
-      <div class="break-head">
-        <h2>Přestávka / kuloární jednání</h2>
-        <div class="break-quickbar">
-          <label>Min<input id="breakMinutes" type="number" min="1" max="180" value="5"></label>
-          <button class="caucus-button" data-break-start="caucus">Kuloár</button>
-          <button class="coffee-button" data-break-start="coffee_break">Káva</button>
-          <button class="save" data-action="end-break">Stop</button>
-        </div>
-      </div>
-      ${compact ? "" : "<p>Zvol délku v minutách a vyvolej kuloární jednání nebo přestávku na kávu. Na projekci se zobrazí velká obrazovka s odpočtem.</p>"}
+      <h2>Přestávka / kuloární jednání</h2>
+      ${compact ? "" : "<p>Ovládání přestávky je v horní liště. Na projekci se zobrazí velká obrazovka s odpočtem.</p>"}
       <div class="break-status ${active ? "" : "inactive"}">${active ? `${esc(active.title)} běží, končí ${timeLabel(active.endsAt)}.` : "Žádná přestávka ani kuloární jednání právě neběží."}</div>
     </div>`;
 }
@@ -370,9 +374,11 @@ function renderLayoutPanel() {
         <button class="save" data-export-attendance>Export XLSX</button>
         <button class="save" data-export-qr>QR PDF</button>
         <button class="save" data-import-attendance>Import XLSX</button>
+        <button class="save" data-import-preferences>Import preferencí XLSX</button>
       </div>
       <div class="vote-summary"><strong>Prezenční listina</strong><br>Přítomno: ${present}<br>Nepřítomno: ${absent}</div>
       <input id="attendanceImportFile" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
+      <input id="preferenceImportFile" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
     </div>
     <div class="stage-wrap"><div class="stage">${renderChairMarker()}${renderSeats("layout")}</div></div>
     <div class="card">
@@ -447,37 +453,49 @@ function renderAgendaPanel() {
 }
 
 function renderAgendaPanelV2() {
-  const item = editingAgendaId ? state.agenda.find((row) => row.id === editingAgendaId) : null;
   return `
-    <form class="card" data-form="agenda">
-      <h2>${item ? "Upravit bod agendy" : "Nový bod agendy"}</h2>
-      <div class="meta compact">
-        <div><strong>Název</strong><input name="title" value="${esc(item?.title || "")}" placeholder="Název bodu" required></div>
-        <div><strong>Typ</strong><select name="type">${agendaTypeOptions(item?.type || "session")}</select></div>
-        <div><strong>Začátek</strong><input name="startsAt" type="time" value="${timeInputValue(item?.startsAt)}"></div>
-        <div><strong>Délka v minutách</strong><input name="durationMinutes" type="number" min="1" value="${esc(item?.durationMinutes || "")}" placeholder="např. 20"></div>
-        <div><strong>Pořadí</strong><input name="displayOrder" type="number" min="0" value="${esc(item?.displayOrder || "")}"></div>
+    <form class="card agenda-quick-add" data-form="agenda">
+      <div class="section-head">
+        <h2>Přidat bod agendy</h2>
+        <button class="approve">Přidat</button>
       </div>
-      <textarea name="note" placeholder="Poznámka">${esc(item?.note || "")}</textarea>
-      <div class="actions">
-        <button class="approve">${item ? "Uložit změny" : "Přidat bod"}</button>
-        ${item ? `<button type="button" class="save" data-cancel-agenda-edit>Zrušit úpravy</button>` : ""}
+      <div class="agenda-add-grid">
+        <input name="title" placeholder="Název bodu" required>
+        <select name="type">${agendaTypeOptions("session")}</select>
+        <input name="startsAt" type="time" aria-label="Začátek">
+        <input name="durationMinutes" type="number" min="1" placeholder="min">
+        <input name="displayOrder" type="number" min="0" placeholder="pořadí">
+        <input name="note" placeholder="Poznámka">
       </div>
     </form>
-    <div class="card">
-      <h2>Bodový program</h2>
-      ${state.agenda.length ? state.agenda.map((row) => `
-        <div class="item agenda-item">
-          <div>
-            <b>${esc(row.title)}</b><br>
-            <span class="muted">${agendaTypeLabel(row.type)}${agendaStartLabel(row) ? " · " + agendaStartLabel(row) : ""}${row.durationMinutes ? " · " + row.durationMinutes + " min" : ""}</span>
-            ${row.note ? `<p>${esc(row.note)}</p>` : ""}
-          </div>
-          <div class="actions">
-            <button class="save" data-edit-agenda="${row.id}">Upravit</button>
-            <button class="reject" data-delete-agenda="${row.id}">Smazat</button>
-          </div>
-        </div>`).join("") : `<div class="empty">Agenda je prázdná.</div>`}
+    <div class="card agenda-editor-card">
+      <div class="section-head">
+        <div>
+          <h2>Upravit agendu</h2>
+          <p>Piš rovnou do řádků. Všechny změny uloží jedno tlačítko.</p>
+        </div>
+        <button class="approve" data-save-data-agenda>Uložit změny</button>
+      </div>
+      ${renderAgendaInlineTable()}
+    </div>`;
+}
+
+function renderAgendaInlineTable() {
+  return `
+    <div class="agenda-inline-wrap">
+      <table class="agenda-inline-table">
+        <thead><tr><th>Čas</th><th>Trvání</th><th>Název</th><th>Typ</th><th>Poznámka</th><th>Pořadí</th><th></th></tr></thead>
+        <tbody>${state.agenda.length ? state.agenda.map((row) => `
+          <tr data-data-agenda-row="${row.id}">
+            <td><input name="startsAt" type="time" value="${esc(timeInputValue(row.startsAt))}"></td>
+            <td><input name="durationMinutes" type="number" min="0" value="${esc(row.durationMinutes || "")}"></td>
+            <td><input name="title" value="${esc(row.title || "")}"></td>
+            <td><select name="type">${agendaTypeOptions(row.type)}</select></td>
+            <td><input name="note" value="${esc(row.note || "")}"></td>
+            <td><input name="displayOrder" type="number" value="${esc(row.displayOrder || 0)}"></td>
+            <td><button class="reject compact-button" data-delete-agenda="${row.id}">Smazat</button></td>
+          </tr>`).join("") : `<tr><td colspan="7" class="muted">Agenda je prázdná.</td></tr>`}</tbody>
+      </table>
     </div>`;
 }
 
@@ -938,6 +956,12 @@ function bindActions() {
   if (importButton && importFile) {
     importButton.onclick = () => importFile.click();
     importFile.onchange = () => importAttendanceFile(importFile.files?.[0]);
+  }
+  const preferenceImportButton = app.querySelector("[data-import-preferences]");
+  const preferenceImportFile = app.querySelector("#preferenceImportFile");
+  if (preferenceImportButton && preferenceImportFile) {
+    preferenceImportButton.onclick = () => preferenceImportFile.click();
+    preferenceImportFile.onchange = () => importPreferenceFile(preferenceImportFile.files?.[0]);
   }
   const exportButton = app.querySelector("[data-export-attendance]");
   if (exportButton) exportButton.onclick = exportAttendanceXlsx;
@@ -1463,6 +1487,22 @@ async function importAttendanceFile(file) {
     if (!res.ok) throw new Error(data?.error?.message || `Import selhal (${res.status}).`);
     await load(false);
     showToast(`Importováno řádků: ${data?.imported ?? 0}`);
+  } catch (err) {
+    showToast(err.message);
+  }
+}
+
+async function importPreferenceFile(file) {
+  if (!file) return;
+  if (!confirm("Import rozřadí účastníky k delegacím podle preferencí a přepíše současné osobní údaje u dotčených států. Pokračovat?")) return;
+  const form = new FormData();
+  form.append("file", file);
+  try {
+    const res = await fetch("/api/attendance/import-preferences", { method: "POST", body: form });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) throw new Error(data?.error?.message || `Import preferencí selhal (${res.status}).`);
+    await load(false);
+    showToast(`Rozřazeno účastníků: ${data?.imported ?? 0}${data?.skipped ? `, nepřiřazeno: ${data.skipped}` : ""}`);
   } catch (err) {
     showToast(err.message);
   }

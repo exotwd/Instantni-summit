@@ -58,6 +58,7 @@ func (a *App) routes() {
 	a.mux.HandleFunc("POST /api/attendance/access-code-enabled", api.RequireAdmin(api.SetAccessCodeEnabled))
 	a.mux.HandleFunc("POST /api/attendance/participant", api.RequireAdmin(api.UpdateParticipant))
 	a.mux.HandleFunc("POST /api/attendance/import", api.RequireAdmin(api.AttendanceImport))
+	a.mux.HandleFunc("POST /api/attendance/import-preferences", api.RequireAdmin(api.AttendancePreferenceImport))
 	a.mux.HandleFunc("POST /api/attendance/export", api.RequireAdmin(api.AttendanceExport))
 	a.mux.HandleFunc("POST /api/attendance/qr-codes", api.RequireAdmin(api.AttendanceQRExport))
 	a.mux.HandleFunc("/api/attendance/generate-links", post(api.RequireAdmin(api.GenerateVoteLinks)))
@@ -67,6 +68,7 @@ func (a *App) routes() {
 	a.mux.HandleFunc("/api/attendance/access-code-enabled", post(api.RequireAdmin(api.SetAccessCodeEnabled)))
 	a.mux.HandleFunc("/api/attendance/participant", post(api.RequireAdmin(api.UpdateParticipant)))
 	a.mux.HandleFunc("/api/attendance/import", post(api.RequireAdmin(api.AttendanceImport)))
+	a.mux.HandleFunc("/api/attendance/import-preferences", post(api.RequireAdmin(api.AttendancePreferenceImport)))
 	a.mux.HandleFunc("/api/attendance/export", post(api.RequireAdmin(api.AttendanceExport)))
 	a.mux.HandleFunc("/api/attendance/qr-codes", post(api.RequireAdmin(api.AttendanceQRExport)))
 

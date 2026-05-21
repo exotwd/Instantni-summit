@@ -112,6 +112,38 @@ func (api *API) AttendanceImport(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"imported": len(req.Rows)})
 }
 
+func (api *API) AttendancePreferenceImport(w http.ResponseWriter, r *http.Request) {
+	current, err := api.attendance.List(r.Context())
+	if err != nil {
+		writeServiceError(w, err)
+		return
+	}
+	rows, skipped, err := readPreferenceXLSX(r, current.Delegations)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_xlsx", err.Error())
+		return
+	}
+	for _, row := range rows {
+		if row.DelegationID == 0 {
+			continue
+		}
+		if err := api.attendance.UpdateParticipant(r.Context(), row); err != nil {
+			writeServiceError(w, err)
+			return
+		}
+	}
+	imported := 0
+	for _, row := range rows {
+		if strings.TrimSpace(row.Name) != "" || strings.TrimSpace(row.Email) != "" {
+			imported++
+		}
+		if strings.TrimSpace(row.CoDelegateName) != "" || strings.TrimSpace(row.CoDelegateEmail) != "" {
+			imported++
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"imported": imported, "delegations": len(rows), "skipped": skipped})
+}
+
 func (api *API) AttendanceExport(w http.ResponseWriter, r *http.Request) {
 	state, err := api.attendance.List(r.Context())
 	if err != nil {

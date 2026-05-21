@@ -182,6 +182,193 @@ func readAttendanceXLSX(r *http.Request, delegations []domain.Delegation) ([]dom
 	return out, nil
 }
 
+type preferenceApplicant struct {
+	Name        string
+	Email       string
+	Class       string
+	Preferences []string
+	Anti        map[string]bool
+}
+
+func readPreferenceXLSX(r *http.Request, delegations []domain.Delegation) ([]domain.Participant, int, error) {
+	if err := r.ParseMultipartForm(16 << 20); err != nil {
+		return nil, 0, errors.New("Soubor XLSX se nepodařilo načíst.")
+	}
+	file, _, err := r.FormFile("file")
+	if err != nil {
+		return nil, 0, errors.New("Chybí soubor XLSX.")
+	}
+	defer file.Close()
+	data, err := io.ReadAll(file)
+	if err != nil {
+		return nil, 0, errors.New("Soubor XLSX se nepodařilo přečíst.")
+	}
+	rows, err := parseXLSXRows(data)
+	if err != nil {
+		return nil, 0, err
+	}
+	if len(rows) < 2 {
+		return nil, 0, nil
+	}
+	headers := map[string]int{}
+	preferenceColumns := []int{}
+	antiColumns := []int{}
+	for i, header := range rows[0] {
+		normalized := normalizeHeader(header)
+		headers[normalized] = i
+		if strings.HasPrefix(normalized, "preference zastupov") {
+			preferenceColumns = append(preferenceColumns, i)
+		}
+		if strings.HasPrefix(normalized, "antipreference") {
+			antiColumns = append(antiColumns, i)
+		}
+	}
+	var applicants []preferenceApplicant
+	for _, row := range rows[1:] {
+		name := firstExistingCell(row, headers, "jmeno a prijmeni", "jmeno")
+		email := firstExistingCell(row, headers, "e mail", "email")
+		if strings.TrimSpace(name) == "" && strings.TrimSpace(email) == "" {
+			continue
+		}
+		wants := firstHeaderPrefixCell(row, rows[0], "chci se ucastnit")
+		if strings.EqualFold(normalizeHeader(wants), "ne") {
+			continue
+		}
+		applicant := preferenceApplicant{
+			Name:        name,
+			Email:       email,
+			Class:       firstExistingCell(row, headers, "trida"),
+			Preferences: []string{},
+			Anti:        map[string]bool{},
+		}
+		for _, index := range preferenceColumns {
+			if index < len(row) {
+				country := normalizeCountryName(row[index])
+				if country != "" {
+					applicant.Preferences = append(applicant.Preferences, country)
+				}
+			}
+		}
+		for _, index := range antiColumns {
+			if index < len(row) {
+				country := normalizeCountryName(row[index])
+				if country != "" {
+					applicant.Anti[country] = true
+				}
+			}
+		}
+		applicants = append(applicants, applicant)
+	}
+	return assignPreferenceApplicants(applicants, delegations)
+}
+
+func assignPreferenceApplicants(applicants []preferenceApplicant, delegations []domain.Delegation) ([]domain.Participant, int, error) {
+	countryToDelegation := map[string]domain.Delegation{}
+	for _, delegation := range delegations {
+		countryToDelegation[normalizeCountryName(delegation.Name)] = delegation
+		countryToDelegation[normalizeCountryName(delegation.Code)] = delegation
+	}
+	assigned := map[int64][]preferenceApplicant{}
+	used := make([]bool, len(applicants))
+	skipped := 0
+	for rank := 0; rank < 3; rank++ {
+		for {
+			bestIndex := -1
+			bestLoad := 3
+			bestID := int64(0)
+			for i, applicant := range applicants {
+				if used[i] || len(applicant.Preferences) <= rank {
+					continue
+				}
+				country := applicant.Preferences[rank]
+				if applicant.Anti[country] {
+					continue
+				}
+				delegation, ok := countryToDelegation[country]
+				if !ok {
+					continue
+				}
+				load := len(assigned[delegation.ID])
+				if load >= 2 {
+					continue
+				}
+				if load < bestLoad {
+					bestIndex = i
+					bestLoad = load
+					bestID = delegation.ID
+				}
+			}
+			if bestIndex == -1 {
+				break
+			}
+			assigned[bestID] = append(assigned[bestID], applicants[bestIndex])
+			used[bestIndex] = true
+		}
+	}
+	for i, applicant := range applicants {
+		if used[i] {
+			continue
+		}
+		bestID := int64(0)
+		bestLoad := 3
+		for _, delegation := range delegations {
+			country := normalizeCountryName(delegation.Name)
+			load := len(assigned[delegation.ID])
+			if load >= 2 || applicant.Anti[country] {
+				continue
+			}
+			if load < bestLoad {
+				bestID = delegation.ID
+				bestLoad = load
+			}
+		}
+		if bestID == 0 {
+			skipped++
+			continue
+		}
+		assigned[bestID] = append(assigned[bestID], applicant)
+		used[i] = true
+	}
+	var out []domain.Participant
+	for _, delegation := range delegations {
+		group := assigned[delegation.ID]
+		if len(group) == 0 {
+			continue
+		}
+		participant := domain.Participant{
+			DelegationID: delegation.ID,
+			Name:         group[0].Name,
+			Email:        group[0].Email,
+			Note:         preferenceNote(group[0], delegation.Name),
+		}
+		if len(group) > 1 {
+			participant.CoDelegateName = group[1].Name
+			participant.CoDelegateEmail = group[1].Email
+			participant.Note = strings.TrimSpace(participant.Note + "\n" + preferenceNote(group[1], delegation.Name))
+		}
+		out = append(out, participant)
+	}
+	return out, skipped, nil
+}
+
+func preferenceNote(applicant preferenceApplicant, assignedCountry string) string {
+	parts := []string{}
+	if applicant.Class != "" {
+		parts = append(parts, "Třída: "+applicant.Class)
+	}
+	if len(applicant.Preferences) > 0 {
+		parts = append(parts, "Preference: "+strings.Join(applicant.Preferences, ", "))
+	}
+	assigned := normalizeCountryName(assignedCountry)
+	for i, preference := range applicant.Preferences {
+		if preference == assigned {
+			parts = append(parts, fmt.Sprintf("Přiřazeno jako preference %d", i+1))
+			break
+		}
+	}
+	return strings.Join(parts, " | ")
+}
+
 func parseXLSXRows(data []byte) ([][]string, error) {
 	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
@@ -318,6 +505,42 @@ func cell(row []string, headers map[string]int, header string) string {
 		return ""
 	}
 	return strings.TrimSpace(row[index])
+}
+
+func firstExistingCell(row []string, headers map[string]int, names ...string) string {
+	for _, name := range names {
+		if value := cell(row, headers, name); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func firstHeaderPrefixCell(row []string, headers []string, prefix string) string {
+	for index, header := range headers {
+		if strings.HasPrefix(normalizeHeader(header), prefix) && index < len(row) {
+			return strings.TrimSpace(row[index])
+		}
+	}
+	return ""
+}
+
+func normalizeCountryName(value string) string {
+	normalized := normalizeHeader(value)
+	aliases := map[string]string{
+		"czech republic": "cesko", "czechia": "cesko", "ceska republika": "cesko",
+		"austria": "rakousko", "belgium": "belgie", "bulgaria": "bulharsko", "croatia": "chorvatsko",
+		"cyprus": "kypr", "denmark": "dansko", "estonia": "estonsko", "finland": "finsko",
+		"france": "francie", "germany": "nemecko", "greece": "recko", "hungary": "madarsko",
+		"ireland": "irsko", "italy": "italie", "latvia": "lotyssko", "lithuania": "litva",
+		"luxembourg": "lucembursko", "netherlands": "nizozemsko", "poland": "polsko",
+		"portugal": "portugalsko", "romania": "rumunsko", "slovakia": "slovensko",
+		"slovenia": "slovinsko", "spain": "spanelsko", "sweden": "svedsko",
+	}
+	if alias, ok := aliases[normalized]; ok {
+		return alias
+	}
+	return normalized
 }
 
 func normalizeHeader(value string) string {
