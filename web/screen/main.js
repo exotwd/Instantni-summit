@@ -202,26 +202,36 @@ function renderDebateOverlay() {
   return `
     <div class="debate-overlay visible">
       <div class="debate-header">
-        <div class="debate-title">Hlasování o PN ${debate.amendment?.number || ""}</div>
-        <div class="debate-subtitle">${esc(shorten(debate.amendment?.text || "", 220))}</div>
+        <div class="debate-title">PN ${debate.amendment?.number || ""}</div>
+        <div class="debate-subtitle">Předkladatel: ${esc(debate.amendment?.submitterName || debate.submitter?.name || "Předkladatel")} · ${esc(shorten(debate.amendment?.text || "", 130))}</div>
       </div>
-      <div class="debate-phase">${debatePhaseLabel(session.phase)}</div>
+      ${renderDebateProposer(debate, session)}
       <div class="debate-columns">
-        ${renderDebatePerson("Předkladatel", debate.submitter, session.phase === "submitter_reading", debate.amendment?.submitterName || "Předkladatel", session.phaseStartedAt)}
-        ${renderDebatePerson("Podporovatel", debate.supporter, session.phase === "supporter_speaking", "Čeká na výběr", session.phaseStartedAt)}
-        ${renderDebatePerson("Odpůrce", debate.opponent, session.phase === "opponent_speaking", "Čeká na výběr", session.phaseStartedAt)}
+        ${renderDebatePerson("Podporovatel návrhu", debate.supporter, session.phase === "supporter_speaking", "Čeká na výběr podporovatele", session.phaseStartedAt, "supporter")}
+        ${renderDebatePerson("Odpůrce návrhu", debate.opponent, session.phase === "opponent_speaking", "Čeká na výběr odpůrce", session.phaseStartedAt, "opponent")}
       </div>
     </div>`;
 }
 
-function renderDebatePerson(role, delegation, active, fallback, startedAt) {
+function renderDebateProposer(debate, session) {
+  const active = session.phase === "submitter_reading";
+  const name = debate.submitter?.name || debate.amendment?.submitterName || "Předkladatel";
   return `
-    <div class="debate-person ${active ? "active" : ""}">
+    <div class="debate-proposer ${active ? "active" : ""}">
+      <div class="debate-role">Prostor předkladateli k přečtení návrhu</div>
+      <div class="debate-name">${esc(name)}</div>
+      <div class="debate-time">${active ? formatRunningTime(session.phaseStartedAt) : "00:00"}</div>
+    </div>`;
+}
+
+function renderDebatePerson(role, delegation, active, fallback, startedAt, side) {
+  return `
+    <div class="debate-person ${side || ""} ${active ? "active" : ""}">
       <div class="debate-role">${esc(role)}</div>
       <div class="debate-flag">${esc(delegation?.flag || "–")}</div>
       <div class="debate-code">${esc(delegation?.code || "")}</div>
       <div class="debate-name">${esc(delegation?.name || fallback)}</div>
-      ${active ? `<div class="debate-time">${formatRunningTime(startedAt)}</div>` : ""}
+      <div class="debate-time">${active ? formatRunningTime(startedAt) : "00:00"}</div>
     </div>`;
 }
 
