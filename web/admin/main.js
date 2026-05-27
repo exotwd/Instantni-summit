@@ -547,14 +547,44 @@ function renderDataManagementPanel() {
       <div class="section-head">
         <div>
           <h2>Správa uložených dat</h2>
-          <p>Hromadně upravuj data přímo v tabulkách. Mazání je dostupné u agendy a PN, úplné vyčištění aplikace je níže v resetu.</p>
+          <p>Hromadně upravuj data přímo v tabulkách. Mazání po kategoriích je níže a vždy vyžaduje potvrzení.</p>
         </div>
       </div>
+      ${renderDataDeletePanel()}
       ${renderDataDelegationsTable()}
       ${renderDataAgendaTable()}
       ${renderDataAmendmentsTable()}
       ${renderDataRuntimeTable()}
     </div>`;
+}
+
+function renderDataDeletePanel() {
+  const scopes = [
+    ["attendance", "Smazat prezenci a účastníky", "Vymaže účastníky, přítomnost, hlasovací kódy a unikátní odkazy. Delegace a rozložení zůstanou."],
+    ["agenda", "Smazat agendu", "Vymaže všechny body agendy."],
+    ["amendments", "Smazat PN", "Vymaže pozměňovací návrhy, jejich debaty a uložená hlasování. Body rezoluce zůstanou."],
+    ["resolution", "Smazat rezoluci", "Vymaže všechny body rezoluce a odpojí cíle PN."],
+    ["voting", "Smazat hlasování", "Vymaže hlasovací relace, hlasy a rozpracované předhlasovací kroky."],
+    ["speakers", "Smazat pořadník", "Vymaže aktuálního řečníka, frontu i reakce."],
+    ["breaks", "Smazat přestávky", "Vymaže historii a aktivní přestávky / kuloární jednání."],
+    ["work-data", "Smazat pracovní data", "Vymaže prezenci, agendu, PN, rezoluci, hlasování, řečníky a přestávky. Nastavení, PINy, delegace a rozložení zůstanou."]
+  ];
+  return `
+    <section class="data-section data-delete-section">
+      <div class="section-head tight">
+        <div>
+          <h3>Mazání dat</h3>
+          <p>Každé mazání proběhne okamžitě po potvrzení textem SMAZAT.</p>
+        </div>
+      </div>
+      <div class="data-delete-grid">
+        ${scopes.map(([scope, title, description]) => `
+          <button class="data-delete-card" data-delete-data-scope="${scope}">
+            <strong>${esc(title)}</strong>
+            <span>${esc(description)}</span>
+          </button>`).join("")}
+      </div>
+    </section>`;
 }
 
 function renderDataDelegationsTable() {
@@ -571,7 +601,7 @@ function renderDataDelegationsTable() {
       <div class="data-table-wrap">
         <table class="data-table">
           <thead>
-            <tr><th>Delegace</th><th>Kód</th><th>Vlajka</th><th>Přítomen</th><th>Kód povolen</th><th>Účastník</th><th>E-mail</th><th>Spoludelegát</th><th>E-mail 2</th><th>Poznámka</th></tr>
+            <tr><th>Delegace</th><th>Kód</th><th>Vlajka</th><th>Přítomen</th><th>Kód povolen</th><th>Účastník</th><th>E-mail</th><th>Poznámka</th></tr>
           </thead>
           <tbody>${rows.map((d) => {
             const participant = d.participant || {};
@@ -584,8 +614,6 @@ function renderDataDelegationsTable() {
                 <td class="check-cell"><input name="accessCodeEnabled" type="checkbox" ${d.accessCodeEnabled ? "checked" : ""}></td>
                 <td><input name="participantName" value="${esc(participant.name || "")}"></td>
                 <td><input name="participantEmail" value="${esc(participant.email || "")}"></td>
-                <td><input name="coDelegateName" value="${esc(participant.coDelegateName || "")}"></td>
-                <td><input name="coDelegateEmail" value="${esc(participant.coDelegateEmail || "")}"></td>
                 <td><input name="note" value="${esc(participant.note || "")}"></td>
               </tr>`;
           }).join("")}</tbody>
@@ -729,8 +757,6 @@ function renderDelegateEditor() {
           <label>Unikátní odkaz<input value="${esc(link || "Zatím není vygenerovaný")}" readonly></label>
           <label>Jméno účastníka<input name="participantName" value="${esc(participant.name || "")}"></label>
           <label>E-mail účastníka<input name="participantEmail" value="${esc(participant.email || "")}"></label>
-          <label>Jméno spoludelegáta<input name="coDelegateName" value="${esc(participant.coDelegateName || "")}"></label>
-          <label>E-mail spoludelegáta<input name="coDelegateEmail" value="${esc(participant.coDelegateEmail || "")}"></label>
         </div>
         <label class="full-label">Poznámka<textarea name="note">${esc(participant.note || "")}</textarea></label>
         <div class="actions">
@@ -1005,6 +1031,9 @@ function bindActions() {
   const saveDataAmendments = app.querySelector("[data-save-data-amendments]");
   if (saveDataAmendments) saveDataAmendments.onclick = saveDataAmendmentsTable;
   app.querySelectorAll("[data-delete-agenda]").forEach((button) => button.onclick = () => request(`/api/agenda/${button.dataset.deleteAgenda}`, { method: "DELETE" }));
+  app.querySelectorAll("[data-delete-data-scope]").forEach((button) => {
+    button.onclick = () => deleteStoredData(button.dataset.deleteDataScope);
+  });
   app.querySelectorAll("[data-edit-agenda]").forEach((button) => button.onclick = () => { editingAgendaId = Number(button.dataset.editAgenda); panel = "agenda"; render(); });
   app.querySelectorAll('[data-action="reset-live"]').forEach((button) => {
     button.onclick = () => confirm("Opravdu resetovat živá data?") && post("/api/settings/reset-live", {});
@@ -1015,6 +1044,18 @@ function bindActions() {
     if (text) post("/api/settings/reset-all", { confirm: text });
     };
   });
+}
+
+async function deleteStoredData(scope) {
+  const text = prompt("Pro smazání zvolených dat napiš SMAZAT");
+  if (text !== "SMAZAT") return;
+  try {
+    await api("/api/settings/delete-data", { method: "POST", body: { scope, confirm: text } });
+    await load(false);
+    showToast("Data byla smazána.");
+  } catch (err) {
+    showToast(err.message);
+  }
 }
 
 async function submitAmendment(event) {
@@ -1101,8 +1142,6 @@ async function saveDelegateDetails() {
     delegationId: editingDelegationId,
     name: form.participantName.value.trim(),
     email: form.participantEmail.value.trim(),
-    coDelegateName: form.coDelegateName.value.trim(),
-    coDelegateEmail: form.coDelegateEmail.value.trim(),
     note: form.note.value.trim()
   };
   try {
@@ -1135,8 +1174,6 @@ async function saveDataDelegationsTable(event) {
         delegationId: id,
         name: dataValue(row, "participantName"),
         email: dataValue(row, "participantEmail"),
-        coDelegateName: dataValue(row, "coDelegateName"),
-        coDelegateEmail: dataValue(row, "coDelegateEmail"),
         note: dataValue(row, "note")
       };
       await api(`/api/delegations/${id}`, { method: "PUT", body: delegation });

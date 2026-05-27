@@ -177,6 +177,43 @@ func (s *SettingsService) ResetAllData(ctx context.Context) (int64, error) {
 	return revision, err
 }
 
+func (s *SettingsService) DeleteStoredData(ctx context.Context, scope string) (int64, error) {
+	scope = strings.TrimSpace(scope)
+	revisionKeysByScope := map[string][]string{
+		"attendance": {"attendance"},
+		"agenda":     {"agenda"},
+		"amendments": {"amendments", "voting", "debate", "resolution"},
+		"resolution": {"resolution", "amendments"},
+		"voting":     {"voting", "debate"},
+		"speakers":   {"speaker"},
+		"breaks":     {"break"},
+		"work-data":  {"attendance", "agenda", "amendments", "resolution", "voting", "speaker", "break", "debate"},
+	}
+	revisionKeys, ok := revisionKeysByScope[scope]
+	if !ok {
+		return 0, NewUserError("invalid_delete_scope", "NeplatnĂ˝ rozsah mazĂˇnĂ­ dat.")
+	}
+	var revision int64
+	err := database.WithTx(ctx, s.db, func(tx *sql.Tx) error {
+		if err := repository.NewSettingsRepository(tx).DeleteStoredData(ctx, scope); err != nil {
+			return err
+		}
+		events := repository.NewEventRepository(tx)
+		for _, key := range revisionKeys {
+			var err error
+			revision, err = events.BumpRevision(ctx, key)
+			if err != nil {
+				return err
+			}
+		}
+		return events.Log(ctx, realtime.EventResetPerformed, "admin", "", map[string]string{"scope": "delete-" + scope})
+	})
+	if err == nil {
+		s.hub.Publish(realtime.Event{Type: realtime.EventResetPerformed, Revision: revision, Payload: map[string]string{"scope": "delete-" + scope}})
+	}
+	return revision, err
+}
+
 func (s *SettingsService) createBackup() error {
 	if s.cfg.DBPath == ":memory:" {
 		return nil

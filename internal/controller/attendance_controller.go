@@ -137,9 +137,6 @@ func (api *API) AttendancePreferenceImport(w http.ResponseWriter, r *http.Reques
 		if strings.TrimSpace(row.Name) != "" || strings.TrimSpace(row.Email) != "" {
 			imported++
 		}
-		if strings.TrimSpace(row.CoDelegateName) != "" || strings.TrimSpace(row.CoDelegateEmail) != "" {
-			imported++
-		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"imported": imported, "delegations": len(rows), "skipped": skipped})
 }

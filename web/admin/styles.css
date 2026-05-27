@@ -1013,6 +1013,35 @@ html.flag-emoji-polyfill body {
   border-top: 0;
 }
 
+.data-delete-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 8px;
+}
+
+.data-delete-card {
+  display: grid;
+  gap: 5px;
+  min-height: 88px;
+  padding: 12px;
+  border: 1px solid #fecaca;
+  border-radius: var(--radius-sm);
+  background: #fff;
+  color: var(--text);
+  text-align: left;
+}
+
+.data-delete-card strong {
+  color: var(--red);
+  font-size: 14px;
+}
+
+.data-delete-card span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 .section-head.tight {
   align-items: flex-start;
 }

@@ -109,6 +109,7 @@ func (a *App) routes() {
 	a.mux.HandleFunc("POST /api/settings/screen-pin", api.RequireAdmin(api.ChangeScreenPIN))
 	a.mux.HandleFunc("POST /api/settings/reset-live", api.RequireAdmin(api.ResetLive))
 	a.mux.HandleFunc("POST /api/settings/reset-all", api.RequireAdmin(api.ResetAll))
+	a.mux.HandleFunc("POST /api/settings/delete-data", api.RequireAdmin(api.DeleteStoredData))
 
 	a.mux.Handle("/", middleware.CacheStatic(a.staticHandler()))
 }

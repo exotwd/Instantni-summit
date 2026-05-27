@@ -103,3 +103,70 @@ func (r *SettingsRepository) ResetAll(ctx context.Context) error {
 	}
 	return nil
 }
+
+func (r *SettingsRepository) DeleteStoredData(ctx context.Context, scope string) error {
+	statementsByScope := map[string][]string{
+		"attendance": {
+			`delete from attendance_records`,
+			`delete from participants`,
+			`update delegations set present=false, access_code=null, access_code_created_at=null, access_code_enabled=false, vote_link_token=null, vote_link_created_at=null, updated_at=current_timestamp`,
+		},
+		"agenda": {
+			`delete from agenda_items`,
+		},
+		"amendments": {
+			`delete from votes`,
+			`delete from voting_sessions`,
+			`delete from debate_sessions`,
+			`delete from amendment_guarantors`,
+			`update resolution_points set source_amendment_id=null, updated_at=current_timestamp`,
+			`delete from amendments`,
+		},
+		"resolution": {
+			`update amendments set target_point_id=null, updated_at=current_timestamp`,
+			`update resolution_points set source_amendment_id=null, updated_at=current_timestamp`,
+			`delete from resolution_points`,
+		},
+		"voting": {
+			`delete from votes`,
+			`delete from voting_sessions`,
+			`delete from debate_sessions`,
+		},
+		"speakers": {
+			`delete from speaker_queue`,
+			`delete from speaker_reactions`,
+			`update speaker_state set current_delegation_id=null, active_reaction_delegation_id=null, current_started_at=null, current_paused_ms=0, revision=revision+1, updated_at=current_timestamp where id=1`,
+		},
+		"breaks": {
+			`delete from breaks`,
+		},
+		"work-data": {
+			`delete from votes`,
+			`delete from voting_sessions`,
+			`delete from speaker_queue`,
+			`delete from speaker_reactions`,
+			`update speaker_state set current_delegation_id=null, active_reaction_delegation_id=null, current_started_at=null, current_paused_ms=0, revision=revision+1, updated_at=current_timestamp where id=1`,
+			`delete from debate_sessions`,
+			`delete from breaks`,
+			`delete from amendment_guarantors`,
+			`update amendments set target_point_id=null, updated_at=current_timestamp`,
+			`update resolution_points set source_amendment_id=null, updated_at=current_timestamp`,
+			`delete from resolution_points`,
+			`delete from amendments`,
+			`delete from attendance_records`,
+			`delete from participants`,
+			`update delegations set present=false, access_code=null, access_code_created_at=null, access_code_enabled=false, vote_link_token=null, vote_link_created_at=null, updated_at=current_timestamp`,
+			`delete from agenda_items`,
+		},
+	}
+	statements, ok := statementsByScope[scope]
+	if !ok {
+		return sql.ErrNoRows
+	}
+	for _, statement := range statements {
+		if _, err := r.db.ExecContext(ctx, statement); err != nil {
+			return err
+		}
+	}
+	return nil
+}

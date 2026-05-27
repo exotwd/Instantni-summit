@@ -205,7 +205,7 @@ func scanDelegation(row delegationScanner, includeParticipant bool) (domain.Dele
 	if includeParticipant && participantID.Valid {
 		d.Participant = &domain.Participant{
 			ID: participantID.Int64, DelegationID: d.ID, Name: nullString(participantName), Email: nullString(participantEmail),
-			CoDelegateName: nullString(coName), CoDelegateEmail: nullString(coEmail), Note: nullString(note),
+			Note: nullString(note),
 			CreatedAt: participantCreated.Time, UpdatedAt: participantUpdated.Time,
 		}
 	}

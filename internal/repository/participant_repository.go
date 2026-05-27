@@ -20,7 +20,7 @@ func (r *ParticipantRepository) UpsertForDelegation(ctx context.Context, p domai
 		values(?,?,?,?,?,?)
 		on conflict(delegation_id) do update set name=excluded.name,email=excluded.email,co_delegate_name=excluded.co_delegate_name,
 		co_delegate_email=excluded.co_delegate_email,note=excluded.note,updated_at=current_timestamp`,
-		p.DelegationID, p.Name, p.Email, p.CoDelegateName, p.CoDelegateEmail, p.Note)
+		p.DelegationID, p.Name, p.Email, "", "", p.Note)
 	if err != nil {
 		return 0, err
 	}

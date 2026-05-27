@@ -58,3 +58,16 @@ func (api *API) ResetAll(w http.ResponseWriter, r *http.Request) {
 	revision, err := api.settings.ResetAllData(r.Context())
 	respond(w, map[string]any{"revision": revision}, err)
 }
+
+func (api *API) DeleteStoredData(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Scope   string `json:"scope"`
+		Confirm string `json:"confirm"`
+	}
+	if err := decode(r, &req); err != nil || req.Confirm != "SMAZAT" {
+		writeError(w, http.StatusBadRequest, "confirmation_required", "Pro smazĂˇnĂ­ dat napiĹˇte SMAZAT.")
+		return
+	}
+	revision, err := api.settings.DeleteStoredData(r.Context(), req.Scope)
+	respond(w, map[string]any{"revision": revision}, err)
+}

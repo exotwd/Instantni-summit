@@ -17,7 +17,7 @@ import (
 
 var attendanceExportHeaders = []string{
 	"Delegation ID", "Stát", "Zkratka", "Přítomen", "Hlasovací odkaz", "4místný kód", "Kód aktivní",
-	"Jméno účastníka", "E-mail účastníka", "Jméno spoludelegáta", "E-mail spoludelegáta", "Poznámka",
+	"Jméno účastníka", "E-mail účastníka", "Poznámka",
 }
 
 func writeAttendanceXLSX(w http.ResponseWriter, state domain.AttendanceSnapshot, baseURL string) {
@@ -78,27 +78,25 @@ func attendanceSheetXML(state domain.AttendanceSnapshot, baseURL string) string 
 	var b strings.Builder
 	lastRow := len(state.Delegations) + 1
 	b.WriteString(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">`)
-	fmt.Fprintf(&b, `<dimension ref="A1:L%d"/>`, lastRow)
+	fmt.Fprintf(&b, `<dimension ref="A1:J%d"/>`, lastRow)
 	b.WriteString(`<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>`)
-	b.WriteString(`<cols><col min="1" max="1" width="14" customWidth="1"/><col min="2" max="3" width="18" customWidth="1"/><col min="4" max="7" width="16" customWidth="1"/><col min="8" max="12" width="24" customWidth="1"/></cols>`)
+	b.WriteString(`<cols><col min="1" max="1" width="14" customWidth="1"/><col min="2" max="3" width="18" customWidth="1"/><col min="4" max="7" width="16" customWidth="1"/><col min="8" max="10" width="24" customWidth="1"/></cols>`)
 	b.WriteString(`<sheetData>`)
 	writeXLSXRow(&b, 1, attendanceExportHeaders)
 	for i, d := range state.Delegations {
 		p := d.Participant
 		values := []string{
 			strconv.FormatInt(d.ID, 10), d.Name, d.Code, boolText(d.Present), voteLinkPath(baseURL, d.VoteLinkToken), d.AccessCode, boolText(d.AccessCodeEnabled),
-			"", "", "", "", "",
+			"", "", "",
 		}
 		if p != nil {
 			values[7] = p.Name
 			values[8] = p.Email
-			values[9] = p.CoDelegateName
-			values[10] = p.CoDelegateEmail
-			values[11] = p.Note
+			values[9] = p.Note
 		}
 		writeXLSXRow(&b, i+2, values)
 	}
-	b.WriteString(`</sheetData><autoFilter ref="A1:L`)
+	b.WriteString(`</sheetData><autoFilter ref="A1:J`)
 	b.WriteString(strconv.Itoa(lastRow))
 	b.WriteString(`"/></worksheet>`)
 	return b.String()
@@ -174,8 +172,6 @@ func readAttendanceXLSX(r *http.Request, delegations []domain.Delegation) ([]dom
 			DelegationID:    id,
 			Name:            cell(row, headers, "jmeno ucastnika"),
 			Email:           cell(row, headers, "e mail ucastnika"),
-			CoDelegateName:  cell(row, headers, "jmeno spoludelegata"),
-			CoDelegateEmail: cell(row, headers, "e mail spoludelegata"),
 			Note:            cell(row, headers, "poznamka"),
 		})
 	}
@@ -185,17 +181,12 @@ func readAttendanceXLSX(r *http.Request, delegations []domain.Delegation) ([]dom
 type preferenceApplicant struct {
 	Name        string
 	Email       string
-	CoName      string
-	CoEmail     string
 	Class       string
 	Preferences []string
 	Anti        map[string]bool
 }
 
 func (a preferenceApplicant) PeopleCount() int {
-	if strings.TrimSpace(a.CoName) != "" || strings.TrimSpace(a.CoEmail) != "" {
-		return 2
-	}
 	return 1
 }
 
@@ -250,9 +241,6 @@ func readPreferenceXLSX(r *http.Request, delegations []domain.Delegation) ([]dom
 			Preferences: []string{},
 			Anti:        map[string]bool{},
 		}
-		if strings.EqualFold(normalizeHeader(wants), "ano") {
-			applicant.CoName = cleanCoDelegateName(firstExistingCell(row, headers, "jmeno a prijmeni"), applicant.Name)
-		}
 		for _, index := range preferenceColumns {
 			if index < len(row) {
 				country := normalizeCountryName(row[index])
@@ -301,7 +289,7 @@ func assignPreferenceApplicants(applicants []preferenceApplicant, delegations []
 					continue
 				}
 				load := assignedPeopleCount(assigned[delegation.ID])
-				if load+applicant.PeopleCount() > 2 {
+				if load+applicant.PeopleCount() > 1 {
 					continue
 				}
 				if load < bestLoad {
@@ -326,7 +314,7 @@ func assignPreferenceApplicants(applicants []preferenceApplicant, delegations []
 		for _, delegation := range delegations {
 			country := normalizeCountryName(delegation.Name)
 			load := assignedPeopleCount(assigned[delegation.ID])
-			if load+applicant.PeopleCount() > 2 || applicant.Anti[country] {
+			if load+applicant.PeopleCount() > 1 || applicant.Anti[country] {
 				continue
 			}
 			if load < bestLoad {
@@ -353,14 +341,6 @@ func assignPreferenceApplicants(applicants []preferenceApplicant, delegations []
 			Email:        group[0].Email,
 			Note:         preferenceNote(group[0], delegation.Name),
 		}
-		if group[0].PeopleCount() == 2 {
-			participant.CoDelegateName = group[0].CoName
-			participant.CoDelegateEmail = group[0].CoEmail
-		} else if len(group) > 1 {
-			participant.CoDelegateName = group[1].Name
-			participant.CoDelegateEmail = group[1].Email
-			participant.Note = strings.TrimSpace(participant.Note + "\n" + preferenceNote(group[1], delegation.Name))
-		}
 		out = append(out, participant)
 	}
 	return out, skipped, nil
@@ -372,30 +352,6 @@ func assignedPeopleCount(group []preferenceApplicant) int {
 		count += applicant.PeopleCount()
 	}
 	return count
-}
-
-func cleanCoDelegateName(value, primary string) string {
-	value = strings.TrimSpace(value)
-	primary = strings.TrimSpace(primary)
-	if value == "" || normalizeHeader(value) == normalizeHeader(primary) {
-		return ""
-	}
-	normalizedValue := normalizeHeader(value)
-	normalizedPrimary := normalizeHeader(primary)
-	if strings.Contains(normalizedValue, normalizedPrimary) && strings.Contains(normalizedValue, " a ") {
-		parts := strings.Split(value, " a ")
-		cleaned := []string{}
-		for _, part := range parts {
-			part = strings.TrimSpace(part)
-			if part != "" && normalizeHeader(part) != normalizedPrimary {
-				cleaned = append(cleaned, part)
-			}
-		}
-		if len(cleaned) > 0 {
-			return strings.Join(cleaned, " a ")
-		}
-	}
-	return value
 }
 
 func preferenceNote(applicant preferenceApplicant, assignedCountry string) string {
