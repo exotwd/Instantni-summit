@@ -378,6 +378,10 @@ button:disabled {
   align-items: stretch;
 }
 
+.voting-admin-layout.no-schema {
+  grid-template-columns: minmax(520px, 900px);
+}
+
 .voting-command,
 .voting-stage-card {
   border-left-color: var(--blue);

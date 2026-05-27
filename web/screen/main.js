@@ -226,10 +226,10 @@ function renderDebateProposer(debate, session) {
 
 function renderDebatePerson(role, delegation, active, fallback, startedAt, side) {
   return `
-    <div class="debate-person ${side || ""} ${active ? "active" : ""}">
+    <div class="debate-person ${side || ""} ${delegation ? "" : "empty"} ${active ? "active" : ""}">
       <div class="debate-role">${esc(role)}</div>
       <div class="debate-flag">${esc(delegation?.flag || "–")}</div>
-      <div class="debate-code">${esc(delegation?.code || "")}</div>
+      <div class="debate-code">${esc(delegation?.code || "–")}</div>
       <div class="debate-name">${esc(delegation?.name || fallback)}</div>
       <div class="debate-time">${active ? formatRunningTime(startedAt) : "00:00"}</div>
     </div>`;

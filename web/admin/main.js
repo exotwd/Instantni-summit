@@ -397,11 +397,12 @@ function renderVotingPanel() {
   const session = state.voting.session;
   const secretMode = isSecretVotingMode();
   const showDebateSchema = !session && !!state.debate?.session;
+  const showSchema = showDebateSchema || !secretMode;
   const schemaMode = showDebateSchema ? "debate" : "voting";
   const schemaTitle = "Schéma hlasování";
   const amendment = state.voting.amendment;
   return `
-    <div class="voting-admin-layout">
+    <div class="voting-admin-layout ${showSchema ? "" : "no-schema"}">
       <div class="card voting-current voting-command">
         <div class="voting-command-head">
           <div>
@@ -427,7 +428,7 @@ function renderVotingPanel() {
           <button class="save" data-action="force-projection">Vynutit projekci</button>
         </div>
       </div>
-      <div class="card voting-stage-card">
+      ${showSchema ? `<div class="card voting-stage-card">
         <div class="section-head tight">
           <div>
             <h2>${schemaTitle}</h2>
@@ -437,7 +438,7 @@ function renderVotingPanel() {
         <div class="stage-wrap unified-voting-stage">
           <div class="stage">${renderChairMarker()}${renderSeats(schemaMode)}</div>
         </div>
-      </div>
+      </div>` : ""}
     </div>
     ${state.debate?.session ? renderDebatePanel({ includeStage: false }) : ""}
     <div class="card">
