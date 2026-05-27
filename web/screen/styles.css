@@ -29,6 +29,7 @@ body {
   margin: 0;
   padding: 0;
   height: 100%;
+  min-height: 100%;
   overflow: hidden;
   background: var(--bg);
   color: var(--text);
@@ -37,25 +38,39 @@ body {
 
 .screen {
   display: grid;
-  grid-template-columns: 24% 52% 24%;
+  grid-template-columns: minmax(250px, 22vw) minmax(460px, 1fr) minmax(310px, 24vw);
   height: 100vh;
+  height: 100dvh;
+  min-height: 0;
 }
 
 .panel {
   min-width: 0;
-  padding: 20px;
+  min-height: 0;
+  padding: clamp(12px, 1.25vw, 20px);
   overflow: hidden;
 }
 
 .left,
 .right {
+  min-height: 0;
   background: linear-gradient(180deg, #111827, #0b1120);
 }
 
-.left { border-right: 1px solid var(--line); }
-.right { border-left: 1px solid var(--line); }
+.left {
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--line);
+}
+
+.right {
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--line);
+}
 
 .center {
+  min-height: 0;
   overflow: auto;
   background: var(--center);
   color: var(--center-text);
@@ -158,7 +173,9 @@ html.flag-emoji-polyfill body {
 
 .mini-stage {
   width: 100%;
-  height: 470px;
+  flex: 1 1 auto;
+  min-height: 220px;
+  height: auto;
 }
 
 .seat {
@@ -216,6 +233,7 @@ html.flag-emoji-polyfill body {
 }
 
 .speaker-current {
+  flex: 0 0 auto;
   margin-bottom: 16px;
   padding: 18px;
   border: 1px solid rgba(59, 130, 246, .45);
@@ -251,13 +269,15 @@ html.flag-emoji-polyfill body {
 }
 
 .reaction-area {
+  flex: 0 0 auto;
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
   margin-bottom: 18px;
 }
 
 .reaction-box {
+  min-width: 0;
   min-height: 82px;
   padding: 12px;
   border: 1px solid var(--line);
@@ -293,6 +313,7 @@ html.flag-emoji-polyfill body {
   display: flex;
   align-items: center;
   gap: 10px;
+  min-width: 0;
 }
 
 .reaction-flag {
@@ -301,11 +322,16 @@ html.flag-emoji-polyfill body {
 }
 
 .reaction-code {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 24px;
   font-weight: 900;
 }
 
 .reaction-time {
+  flex: 0 0 auto;
   margin-left: auto;
   color: #fde68a;
   font-size: 23px;
@@ -319,7 +345,11 @@ html.flag-emoji-polyfill body {
 }
 
 .speaker-queue {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
   margin: 0;
+  padding-right: 4px;
   padding-left: 0;
   list-style-position: inside;
   font-size: 22px;
@@ -333,6 +363,146 @@ html.flag-emoji-polyfill body {
   border-left: 7px solid var(--purple);
   border-radius: 14px;
   background: rgba(88, 28, 135, .22);
+}
+
+@media (max-height: 820px) {
+  .clock {
+    min-width: 116px;
+    height: 48px;
+    margin-bottom: 4px;
+    padding: 0 12px;
+    border-radius: 14px;
+    font-size: 30px;
+  }
+
+  .connection {
+    margin-bottom: 10px;
+    font-size: 11px;
+  }
+
+  .section-title,
+  .queue-title {
+    margin: 4px 0 8px;
+    font-size: 11px;
+  }
+
+  .speaker-current {
+    margin-bottom: 10px;
+    padding: 12px;
+    border-radius: 16px;
+  }
+
+  .speaker-current-flag {
+    margin-bottom: 4px;
+    font-size: 36px;
+  }
+
+  .speaker-current-name {
+    font-size: 22px;
+  }
+
+  .speaker-time {
+    margin-top: 4px;
+    font-size: 24px;
+  }
+
+  .reaction-area {
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+
+  .reaction-box {
+    min-height: 58px;
+    padding: 8px;
+    border-left-width: 5px;
+    border-radius: 12px;
+  }
+
+  .reaction-line {
+    gap: 7px;
+  }
+
+  .reaction-flag {
+    font-size: 22px;
+  }
+
+  .reaction-code {
+    font-size: 18px;
+  }
+
+  .reaction-time {
+    font-size: 16px;
+  }
+
+  .reaction-waiting {
+    margin-top: 3px;
+    font-size: 11px;
+  }
+
+  .speaker-queue {
+    font-size: 17px;
+    line-height: 1.3;
+  }
+
+  .speaker-queue li {
+    margin-bottom: 5px;
+    padding: 6px 8px;
+    border-radius: 10px;
+  }
+
+  .mini-stage {
+    min-height: 180px;
+  }
+
+  .resolution {
+    font-size: 20px;
+    line-height: 1.5;
+  }
+}
+
+@media (max-width: 1180px) {
+  .screen {
+    grid-template-columns: minmax(220px, 22vw) minmax(380px, 1fr) minmax(300px, 29vw);
+  }
+
+  .speaker-current-name {
+    font-size: 24px;
+  }
+
+  .speaker-queue {
+    font-size: 19px;
+  }
+}
+
+@media (max-width: 980px) {
+  html,
+  body {
+    overflow: auto;
+  }
+
+  .screen {
+    grid-template-columns: 1fr;
+    height: auto;
+    min-height: 100dvh;
+  }
+
+  .panel {
+    overflow: visible;
+  }
+
+  .left,
+  .right {
+    border: 0;
+  }
+
+  .mini-stage {
+    flex: none;
+    height: 360px;
+  }
+
+  .speaker-queue {
+    max-height: 320px;
+  }
 }
 
 .overlay {
