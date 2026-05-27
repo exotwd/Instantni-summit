@@ -44,6 +44,13 @@ func (s *DelegationService) Update(ctx context.Context, d domain.Delegation) err
 }
 
 func (s *DelegationService) UpdateSeat(ctx context.Context, seat domain.SeatLayout) error {
+	return s.UpdateSeats(ctx, []domain.SeatLayout{seat})
+}
+
+func (s *DelegationService) UpdateSeats(ctx context.Context, seats []domain.SeatLayout) error {
+	if len(seats) == 0 {
+		return nil
+	}
 	var revision int64
 	err := database.WithTx(ctx, s.db, func(tx *sql.Tx) error {
 		events := repository.NewEventRepository(tx)
@@ -52,13 +59,13 @@ func (s *DelegationService) UpdateSeat(ctx context.Context, seat domain.SeatLayo
 		if err != nil {
 			return err
 		}
-		if err := repository.NewDelegationRepository(tx).UpdateSeat(ctx, seat, revision); err != nil {
+		if err := repository.NewDelegationRepository(tx).UpdateSeats(ctx, seats, revision); err != nil {
 			return err
 		}
-		return events.Log(ctx, realtime.EventLayoutUpdated, "admin", "", seat)
+		return events.Log(ctx, realtime.EventLayoutUpdated, "admin", "", seats)
 	})
 	if err == nil {
-		s.hub.Publish(realtime.Event{Type: realtime.EventLayoutUpdated, Revision: revision, Payload: seat})
+		s.hub.Publish(realtime.Event{Type: realtime.EventLayoutUpdated, Revision: revision, Payload: seats})
 	}
 	return err
 }

@@ -76,6 +76,42 @@ func (s *AgendaService) ReorderAgendaItems(ctx context.Context, ids []int64) err
 	})
 }
 
+func (s *AgendaService) ReplaceAgendaItems(ctx context.Context, items []domain.AgendaItem) error {
+	for i := range items {
+		items[i] = normalizeAgendaItem(items[i])
+		if items[i].DisplayOrder == 0 {
+			items[i].DisplayOrder = i + 1
+		}
+		if err := validateAgenda(items[i]); err != nil {
+			return err
+		}
+	}
+	var revision int64
+	err := database.WithTx(ctx, s.db, func(tx *sql.Tx) error {
+		repo := repository.NewAgendaRepository(tx)
+		if err := repo.DeleteAll(ctx); err != nil {
+			return err
+		}
+		for _, item := range items {
+			if _, err := repo.Create(ctx, item); err != nil {
+				return err
+			}
+		}
+		events := repository.NewEventRepository(tx)
+		var err error
+		revision, err = events.BumpRevision(ctx, "agenda")
+		if err != nil {
+			return err
+		}
+		return events.Log(ctx, realtime.EventAgendaUpdated, "admin", "", items)
+	})
+	if err == nil {
+		current, _ := s.ListAgenda(ctx)
+		s.hub.Publish(realtime.Event{Type: realtime.EventAgendaUpdated, Revision: revision, Payload: current})
+	}
+	return err
+}
+
 func (s *AgendaService) mutate(ctx context.Context, fn func(*sql.Tx) error) error {
 	var revision int64
 	err := database.WithTx(ctx, s.db, func(tx *sql.Tx) error {

@@ -57,7 +57,8 @@
   }
 
   function renderSpeakerSeats(adminState) {
-    const delegations = adminState.delegations || adminState.attendance?.delegations || [];
+    const hidden = hiddenSeatIds(adminState);
+    const delegations = (adminState.delegations || adminState.attendance?.delegations || []).filter((delegation) => !hidden.has(String(delegation.id)));
     return delegations.map((delegation, index) => {
       const seat = delegation.seat || defaultSeat(index);
       const rotation = Number(seat.rotation || 0);
@@ -70,6 +71,15 @@
           </div>
         </div>`;
     }).join("");
+  }
+
+  function hiddenSeatIds(adminState) {
+    const raw = adminState.settings?.values?.hidden_seat_ids || "[]";
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return new Set(parsed.map((id) => String(id)));
+    } catch {}
+    return new Set(String(raw).split(",").map((id) => id.trim()).filter(Boolean));
   }
 
   function renderChairMarker(adminState) {

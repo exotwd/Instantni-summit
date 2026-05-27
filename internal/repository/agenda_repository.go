@@ -65,6 +65,11 @@ func (r *AgendaRepository) Delete(ctx context.Context, id int64) error {
 	return err
 }
 
+func (r *AgendaRepository) DeleteAll(ctx context.Context) error {
+	_, err := r.db.ExecContext(ctx, `delete from agenda_items`)
+	return err
+}
+
 func (r *AgendaRepository) Reorder(ctx context.Context, ids []int64) error {
 	for i, id := range ids {
 		if _, err := r.db.ExecContext(ctx, `update agenda_items set display_order=?, updated_at=current_timestamp where id=?`, i+1, id); err != nil {

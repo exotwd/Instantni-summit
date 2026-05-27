@@ -90,8 +90,10 @@ func (a *App) routes() {
 
 	a.mux.HandleFunc("PUT /api/delegations/{id}", api.RequireAdmin(api.UpdateDelegation))
 	a.mux.HandleFunc("POST /api/layout/seat", api.RequireAdmin(api.UpdateSeat))
+	a.mux.HandleFunc("POST /api/layout/import", api.RequireAdmin(api.LayoutImport))
 	a.mux.HandleFunc("/api/delegations/{id}", put(api.RequireAdmin(api.UpdateDelegation)))
 	a.mux.HandleFunc("/api/layout/seat", post(api.RequireAdmin(api.UpdateSeat)))
+	a.mux.HandleFunc("/api/layout/import", post(api.RequireAdmin(api.LayoutImport)))
 
 	a.mux.HandleFunc("POST /api/breaks/start", api.RequireAdmin(api.StartBreak))
 	a.mux.HandleFunc("POST /api/breaks/end", api.RequireAdmin(api.EndBreak))
@@ -102,6 +104,8 @@ func (a *App) routes() {
 	a.mux.HandleFunc("PUT /api/agenda/{id}", api.RequireAdmin(api.UpdateAgenda))
 	a.mux.HandleFunc("DELETE /api/agenda/{id}", api.RequireAdmin(api.DeleteAgenda))
 	a.mux.HandleFunc("POST /api/agenda/reorder", api.RequireAdmin(api.ReorderAgenda))
+	a.mux.HandleFunc("POST /api/agenda/import", api.RequireAdmin(api.AgendaImport))
+	a.mux.HandleFunc("/api/agenda/import", post(api.RequireAdmin(api.AgendaImport)))
 
 	a.mux.HandleFunc("GET /api/settings", api.RequireAdmin(api.GetSettings))
 	a.mux.HandleFunc("POST /api/settings", api.RequireAdmin(api.UpdateSettings))

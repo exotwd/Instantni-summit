@@ -379,10 +379,12 @@ function renderLayoutPanel() {
         <button class="save" data-export-qr>QR PDF</button>
         <button class="save" data-import-attendance>Import XLSX</button>
         <button class="save" data-import-preferences>Import preferencí XLSX</button>
+        <button class="save" data-import-layout>Import rozložení</button>
       </div>
       <div class="vote-summary"><strong>Prezenční listina</strong><br>Přítomno: ${present}<br>Nepřítomno: ${absent}</div>
       <input id="attendanceImportFile" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
       <input id="preferenceImportFile" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
+      <input id="layoutImportFile" type="file" accept=".xlsx,.csv,.tsv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,text/tab-separated-values" hidden>
     </div>
     <div class="stage-wrap"><div class="stage">${renderChairMarker()}${renderSeats("layout")}</div></div>
     <div class="card">
@@ -397,27 +399,47 @@ function renderVotingPanel() {
   const showDebateSchema = !session && !!state.debate?.session;
   const schemaMode = showDebateSchema ? "debate" : "voting";
   const schemaTitle = "Schéma hlasování";
+  const amendment = state.voting.amendment;
   return `
-    <div class="card voting-current">
-      <h2>Hlasování o PN</h2>
-      ${session ? renderSessionInfo(session) : `<div class="empty">Není spuštěné žádné hlasování.</div>`}
-      <div class="voting-status"><strong>Režim:</strong> ${secretMode ? "jednoduché / tajné hlasování" : "veřejné hlasování se schématem"}<br>Klávesy předsedajícího: Q = pro, P = proti, mezerník = zdržuje se. Hlas se zapíše další přítomné delegaci v pořadí.</div>
-      <div class="vote-summary">${renderVoteSummary()}</div>
-      <div class="actions">
-        <button class="approve" data-vote-action="close" ${session?.status === "open" ? "" : "disabled"}>Ukončit hlasování</button>
-        <button class="save" data-vote-action="reopen" ${session?.status === "closed" ? "" : "disabled"}>Obnovit hlasování</button>
-        <button class="approve" data-vote-action="save" ${session?.status === "closed" ? "" : "disabled"}>Uložit výsledek</button>
-        <button class="present" data-optical="for" ${session ? "" : "disabled"}>Optická většina PRO</button>
-        <button class="reject" data-optical="against" ${session ? "" : "disabled"}>Optická většina PROTI</button>
-        <button class="reject" data-vote-action="cancel" ${session ? "" : "disabled"}>Zrušit hlasování</button>
-        <button class="save" data-action="force-projection">Vynutit aktualizaci projekce</button>
+    <div class="voting-admin-layout">
+      <div class="card voting-current voting-command">
+        <div class="voting-command-head">
+          <div>
+            <span class="voting-state-pill ${session?.status === "open" ? "open" : session ? "closed" : ""}">${session ? statusLabel(session.status) : "neprobíhá"}</span>
+            <h2>${amendment ? `Hlasování o PN ${esc(amendment.number || "")}` : "Hlasování"}</h2>
+            <p>${amendment ? esc(shorten(amendment.text, 210)) : "Vyber PN níže a zahaj hlasování."}</p>
+          </div>
+          <div class="voting-mode-box">
+            <strong>${secretMode ? "Tajné" : "Veřejné"}</strong>
+            <span>${secretMode ? "bez schématu na projekci" : "schéma a živé hlasy"}</span>
+          </div>
+        </div>
+        ${session ? renderSessionInfo(session) : `<div class="empty">Není spuštěné žádné hlasování.</div>`}
+        ${renderVoteSummary()}
+        <div class="voting-status voting-hotkeys"><strong>Klávesy předsedajícího:</strong> Q = pro, P = proti, mezerník = zdržuje se. Hlas se zapíše další přítomné delegaci v pořadí.</div>
+        <div class="actions voting-actions">
+          <button class="approve" data-vote-action="close" ${session?.status === "open" ? "" : "disabled"}>Ukončit hlasování</button>
+          <button class="save" data-vote-action="reopen" ${session?.status === "closed" ? "" : "disabled"}>Obnovit hlasování</button>
+          <button class="approve" data-vote-action="save" ${session?.status === "closed" ? "" : "disabled"}>Uložit výsledek</button>
+          <button class="present" data-optical="for" ${session ? "" : "disabled"}>Optická většina PRO</button>
+          <button class="reject" data-optical="against" ${session ? "" : "disabled"}>Optická většina PROTI</button>
+          <button class="reject" data-vote-action="cancel" ${session ? "" : "disabled"}>Zrušit hlasování</button>
+          <button class="save" data-action="force-projection">Vynutit projekci</button>
+        </div>
+      </div>
+      <div class="card voting-stage-card">
+        <div class="section-head tight">
+          <div>
+            <h2>${schemaTitle}</h2>
+            <p>${showDebateSchema ? "Právě se vybírá podporovatel nebo odpůrce." : "Kliknutím na stůl upravíš hlas."}</p>
+          </div>
+        </div>
+        <div class="stage-wrap unified-voting-stage">
+          <div class="stage">${renderChairMarker()}${renderSeats(schemaMode)}</div>
+        </div>
       </div>
     </div>
     ${state.debate?.session ? renderDebatePanel({ includeStage: false }) : ""}
-    <div class="stage-wrap unified-voting-stage">
-      <div class="stage-caption">${schemaTitle}</div>
-      <div class="stage">${renderChairMarker()}${renderSeats(schemaMode)}</div>
-    </div>
     <div class="card">
       <h2>Spustit hlasování o PN</h2>
       ${state.amendments.length ? state.amendments.map((item) => `<div class="item"><b>PN ${item.number}</b> <span class="badge">${statusLabel(item.status)}</span><p>${esc(item.text)}</p><button class="vote-button" data-start-voting-process="${item.id}" ${canStartVotingProcessFor(item) ? "" : "disabled"}>${canStartVotingFor(item) ? "Spustit hlasování" : "Zahájit hlasování"}</button></div>`).join("") : `<div class="empty">Zatím nejsou žádné PN.</div>`}
@@ -438,7 +460,13 @@ function renderSessionInfo(session) {
 function renderVoteSummary() {
   const counts = state.voting.counts || {};
   const passed = (counts.for || 0) > (counts.against || 0);
-  return `<strong>Souhrn hlasování</strong><br>Pro: ${counts.for || 0}<br>Proti: ${counts.against || 0}<br>Zdržuje se: ${counts.abstain || 0}<br><strong>${passed ? "PŘIJATO" : "NEPŘIJATO"}</strong>`;
+  return `
+    <div class="admin-vote-counts">
+      <div class="admin-vote-count for"><span>PRO</span><strong>${counts.for || 0}</strong></div>
+      <div class="admin-vote-count against"><span>PROTI</span><strong>${counts.against || 0}</strong></div>
+      <div class="admin-vote-count abstain"><span>ZDRŽUJE SE</span><strong>${counts.abstain || 0}</strong></div>
+      <div class="admin-vote-result ${passed ? "passed" : "failed"}"><span>Výsledek</span><strong>${passed ? "PŘIJATO" : "NEPŘIJATO"}</strong></div>
+    </div>`;
 }
 
 function renderAgendaPanel() {
@@ -462,7 +490,9 @@ function renderAgendaPanelV2() {
       <div class="section-head">
         <h2>Přidat bod agendy</h2>
         <button class="approve">Přidat</button>
+        <button type="button" class="save" data-import-agenda>Import agendy</button>
       </div>
+      <input id="agendaImportFile" type="file" accept=".xlsx,.csv,.tsv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,text/tab-separated-values" hidden>
       <div class="agenda-add-grid">
         <input name="title" placeholder="Název bodu" required>
         <select name="type">${agendaTypeOptions("session")}</select>
@@ -771,11 +801,13 @@ function renderDelegateEditor() {
 }
 
 function renderSeats(mode) {
-  return state.delegations.map((d, index) => {
+  return visibleSeatDelegations(mode).map((d, index) => {
     const seat = d.seat || defaultSeat(index);
     const vote = voteForDelegation(d.id);
     const classes = ["seat"];
+    const hidden = isSeatHidden(d.id);
     if (mode !== "layout") classes.push("overview-seat");
+    if (hidden && mode === "layout") classes.push("seat-hidden-manual");
     let label = "";
     let data = "";
     let tools = "";
@@ -814,10 +846,11 @@ function renderSeats(mode) {
     } else {
       classes.push(d.present ? "attendance-present" : "attendance-absent");
       data = `data-layout-seat="${d.id}"`;
-      label = `<div class="seat-attendance">${d.present ? "PŘÍTOMEN" : "NEPŘÍTOMEN"}</div>`;
+      label = `<div class="seat-attendance">${hidden ? "SKRYTO" : (d.present ? "PŘÍTOMEN" : "NEPŘÍTOMEN")}</div>`;
       tools = `
         <div class="seat-tools">
           <button type="button" class="seat-tool" title="Upravit delegaci" data-seat-tool data-edit-delegation="${d.id}">✎</button>
+          <button type="button" class="seat-tool" title="${hidden ? "Zobrazit stůl ve schématech" : "Skrýt stůl ze schémat"}" data-seat-tool data-seat-visibility="${d.id}">${hidden ? "O" : "×"}</button>
           <button type="button" class="seat-tool" title="Otočit doleva" data-seat-tool data-seat-rotate="${d.id}" data-delta="-15">↺</button>
           <button type="button" class="seat-tool" title="Otočit doprava" data-seat-tool data-seat-rotate="${d.id}" data-delta="15">↻</button>
           <button type="button" class="seat-tool" title="Zmenšit" data-seat-tool data-seat-resize="${d.id}" data-delta="-1">−</button>
@@ -868,6 +901,25 @@ function chairSeat() {
 function numberSetting(value, fallback) {
   const number = Number(value);
   return Number.isFinite(number) ? number : fallback;
+}
+
+function visibleSeatDelegations(mode) {
+  const delegations = state.delegations || [];
+  if (mode === "layout") return delegations;
+  return delegations.filter((delegation) => !isSeatHidden(delegation.id));
+}
+
+function hiddenSeatIds() {
+  const raw = state?.settings?.values?.hidden_seat_ids || "[]";
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return new Set(parsed.map((id) => String(id)));
+  } catch {}
+  return new Set(String(raw).split(",").map((id) => id.trim()).filter(Boolean));
+}
+
+function isSeatHidden(id) {
+  return hiddenSeatIds().has(String(id));
 }
 
 function canStartVotingFor(item) {
@@ -981,6 +1033,12 @@ function bindActions() {
       resizeLayoutSeat(Number(button.dataset.seatResize), Number(button.dataset.delta || 0));
     };
   });
+  app.querySelectorAll("[data-seat-visibility]").forEach((button) => {
+    button.onclick = (event) => {
+      event.stopPropagation();
+      toggleSeatVisibility(Number(button.dataset.seatVisibility));
+    };
+  });
   app.querySelectorAll("[data-arrange]").forEach((button) => button.onclick = () => arrangeSeats(button.dataset.arrange));
   const importButton = app.querySelector("[data-import-attendance]");
   const importFile = app.querySelector("#attendanceImportFile");
@@ -993,6 +1051,18 @@ function bindActions() {
   if (preferenceImportButton && preferenceImportFile) {
     preferenceImportButton.onclick = () => preferenceImportFile.click();
     preferenceImportFile.onchange = () => importPreferenceFile(preferenceImportFile.files?.[0]);
+  }
+  const layoutImportButton = app.querySelector("[data-import-layout]");
+  const layoutImportFile = app.querySelector("#layoutImportFile");
+  if (layoutImportButton && layoutImportFile) {
+    layoutImportButton.onclick = () => layoutImportFile.click();
+    layoutImportFile.onchange = () => importLayoutFile(layoutImportFile.files?.[0]);
+  }
+  const agendaImportButton = app.querySelector("[data-import-agenda]");
+  const agendaImportFile = app.querySelector("#agendaImportFile");
+  if (agendaImportButton && agendaImportFile) {
+    agendaImportButton.onclick = () => agendaImportFile.click();
+    agendaImportFile.onchange = () => importAgendaFile(agendaImportFile.files?.[0]);
   }
   const exportButton = app.querySelector("[data-export-attendance]");
   if (exportButton) exportButton.onclick = exportAttendanceXlsx;
@@ -1119,6 +1189,15 @@ async function submitSettings(event) {
     default_voting_time_sec: String(form.default_voting_time_sec.value || "60"),
     voting_mode: form.voting_mode.value
   });
+}
+
+async function toggleSeatVisibility(id) {
+  const ids = hiddenSeatIds();
+  const key = String(id);
+  const willHide = !ids.has(key);
+  if (willHide) ids.add(key);
+  else ids.delete(key);
+  await post("/api/settings", { hidden_seat_ids: JSON.stringify(Array.from(ids)) }, willHide ? "Stůl skryt ze schémat." : "Stůl zobrazen ve schématech.");
 }
 
 async function submitPin(event) {
@@ -1589,6 +1668,37 @@ async function importPreferenceFile(file) {
     if (!res.ok) throw new Error(data?.error?.message || `Import preferencí selhal (${res.status}).`);
     await load(false);
     showToast(`Rozřazeno účastníků: ${data?.imported ?? 0}${data?.skipped ? `, nepřiřazeno: ${data.skipped}` : ""}`);
+  } catch (err) {
+    showToast(err.message);
+  }
+}
+
+async function importLayoutFile(file) {
+  if (!file) return;
+  const form = new FormData();
+  form.append("file", file);
+  try {
+    const res = await fetch("/api/layout/import", { method: "POST", body: form });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) throw new Error(data?.error?.message || `Import rozložení selhal (${res.status}).`);
+    await load(false);
+    showToast(`Importováno stolů: ${data?.imported ?? 0}${data?.skipped ? `, přeskočeno: ${data.skipped}` : ""}`);
+  } catch (err) {
+    showToast(err.message);
+  }
+}
+
+async function importAgendaFile(file) {
+  if (!file) return;
+  if (!confirm("Import agendy nahradí současnou agendu obsahem souboru. Pokračovat?")) return;
+  const form = new FormData();
+  form.append("file", file);
+  try {
+    const res = await fetch("/api/agenda/import", { method: "POST", body: form });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) throw new Error(data?.error?.message || `Import agendy selhal (${res.status}).`);
+    await load(false);
+    showToast(`Importováno bodů agendy: ${data?.imported ?? 0}${data?.skipped ? `, přeskočeno: ${data.skipped}` : ""}`);
   } catch (err) {
     showToast(err.message);
   }

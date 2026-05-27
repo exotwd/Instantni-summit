@@ -234,9 +234,10 @@ function renderVotingOverlay() {
   const isResult = session.status === "saved" || session.status === "closed";
   const secretMode = (state.settings.values.voting_mode || "public") === "secret";
   return `
-    <div id="voteOverlay" class="overlay visible">
+    <div id="voteOverlay" class="overlay voting-overlay ${isResult ? "result-state" : "active-state"} visible">
       <div class="overlay-header">
         <div>
+          <div class="vote-status-pill ${session.status === "open" ? "open" : "closed"}">${voteStatusLabel(session)}</div>
           <div class="overlay-title">${isResult ? "Výsledek hlasování" : "Hlasování"}${amendment ? ` o PN ${esc(amendment.number || "")}` : ""}</div>
           <div class="overlay-subtitle">${amendment ? esc(shorten(amendment.text || "", 220)) : "Procedurální hlasování"}</div>
         </div>
@@ -248,13 +249,19 @@ function renderVotingOverlay() {
         </div>
       </div>
       ${secretMode
-        ? `<div class="secret-vote-board">
-            <div class="secret-count for">PRO<br><strong>${counts.for || 0}</strong></div>
-            <div class="secret-count against">PROTI<br><strong>${counts.against || 0}</strong></div>
-            <div class="secret-count abstain">ZDRŽUJE SE<br><strong>${counts.abstain || 0}</strong></div>
+        ? `<div class="secret-vote-board voting-secret-board">
+            <div class="secret-count for"><span>PRO</span><strong>${counts.for || 0}</strong></div>
+            <div class="secret-count against"><span>PROTI</span><strong>${counts.against || 0}</strong></div>
+            <div class="secret-count abstain"><span>ZDRŽUJE SE</span><strong>${counts.abstain || 0}</strong></div>
           </div>`
-        : `<div class="overlay-stage">${renderSeatMap("vote", true)}</div>`}
+        : `<div class="overlay-stage vote-stage">${renderSeatMap("vote", true)}</div>`}
     </div>`;
+}
+
+function voteStatusLabel(session) {
+  if (session.status === "open") return "hlasování probíhá";
+  if (session.status === "saved") return "výsledek uložen";
+  return "hlasování ukončeno";
 }
 
 function renderBreakOverlay() {
@@ -275,7 +282,7 @@ function renderBreakOverlay() {
 
 function renderSeatMap(mode, large) {
   const votes = new Map((state.voting.votes || []).map((vote) => [vote.delegationId, vote.choice]));
-  return renderChairMarker() + state.delegations.map((delegation, index) => {
+  return renderChairMarker() + visibleSeatDelegations().map((delegation, index) => {
     const seat = projectionSeat(delegation.seat || defaultSeat(index), large);
     const classes = ["seat"];
     if (mode === "vote") {
@@ -287,6 +294,21 @@ function renderSeatMap(mode, large) {
     }
     return `<div class="${classes.join(" ")}" style="left:${seat.x}%;top:${seat.y}%;width:${seat.w}%;height:${seat.h}%;transform:rotate(${seat.rotation || 0}deg);" title="${esc(delegation.name)}"><div class="seat-flag-map">${esc(delegation.flag || delegation.code || "")}</div></div>`;
   }).join("");
+}
+
+function visibleSeatDelegations() {
+  const delegations = state.delegations || [];
+  const hidden = hiddenSeatIds();
+  return delegations.filter((delegation) => !hidden.has(String(delegation.id)));
+}
+
+function hiddenSeatIds() {
+  const raw = state?.settings?.values?.hidden_seat_ids || "[]";
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return new Set(parsed.map((id) => String(id)));
+  } catch {}
+  return new Set(String(raw).split(",").map((id) => id.trim()).filter(Boolean));
 }
 
 function renderChairMarker() {

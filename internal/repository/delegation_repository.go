@@ -140,6 +140,15 @@ func (r *DelegationRepository) UpdateSeat(ctx context.Context, seat domain.SeatL
 	return err
 }
 
+func (r *DelegationRepository) UpdateSeats(ctx context.Context, seats []domain.SeatLayout, revision int64) error {
+	for _, seat := range seats {
+		if err := r.UpdateSeat(ctx, seat, revision); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (r *DelegationRepository) EnsureSpeakerState(ctx context.Context) error {
 	_, err := r.db.ExecContext(ctx, `insert into speaker_state(id, revision) values(1,1) on conflict(id) do nothing`)
 	return err
