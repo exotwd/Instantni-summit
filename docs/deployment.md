@@ -6,7 +6,7 @@ These commands assume the repository is already cloned to `/home/ubuntu/instantn
 
 ```bash
 sudo apt update
-sudo apt install -y build-essential sqlite3 curl git rsync ufw
+sudo apt install -y build-essential sqlite3 curl git rsync iptables-persistent
 
 curl -fsSL https://go.dev/dl/go1.25.0.linux-amd64.tar.gz -o /tmp/go.tar.gz
 sudo rm -rf /usr/local/go
@@ -79,6 +79,16 @@ curl -f http://127.0.0.1:8067/healthz
 
 ## 5. Public access
 
+The examples below use `iptables`, not `ufw`. Keep SSH open before changing default input policy.
+
+Common baseline for both options:
+
+```bash
+sudo iptables -I INPUT -i lo -j ACCEPT
+sudo iptables -I INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+sudo iptables -I INPUT -p tcp --dport 22 -j ACCEPT
+```
+
 ### Option A: no reverse proxy
 
 Expose the Go app directly on allowed port `8067`:
@@ -86,9 +96,9 @@ Expose the Go app directly on allowed port `8067`:
 ```bash
 sudo sed -i 's/^APP_ADDR=.*/APP_ADDR=0.0.0.0:8067/' /opt/mun-app/.env
 sudo systemctl restart mun-app
-sudo ufw allow OpenSSH
-sudo ufw allow 8067/tcp
-sudo ufw enable
+sudo iptables -I INPUT -p tcp --dport 8067 -j ACCEPT
+sudo iptables -P INPUT DROP
+sudo netfilter-persistent save
 ```
 
 Open `http://YOUR_SERVER_IP:8067/admin`.
@@ -110,16 +120,99 @@ cd /home/ubuntu/instantni-summit
 sudo cp deploy/Caddyfile /etc/caddy/Caddyfile
 sudo caddy validate --config /etc/caddy/Caddyfile
 sudo systemctl enable --now caddy
-sudo ufw allow OpenSSH
-sudo ufw allow 8068/tcp
-sudo ufw enable
+sudo iptables -I INPUT -p tcp --dport 8068 -j ACCEPT
+sudo iptables -P INPUT DROP
+sudo netfilter-persistent save
 ```
 
 Open `http://YOUR_SERVER_IP:8068/admin`.
 
 The bundled Caddyfile disables Caddy's default admin listener and proxies `:8068` to the Go app on `127.0.0.1:8067`, keeping all application ports in the `8067-8070` range.
 
-## 6. After code updates
+## 6. Domain and SSL
+
+Use this when the site should be available as `https://summit.example.com` instead of `http://SERVER_IP:8067`.
+
+### DNS
+
+Create an `A` record at your DNS provider:
+
+```text
+summit.example.com  A  YOUR_SERVER_IP
+```
+
+Wait until it resolves:
+
+```bash
+dig +short summit.example.com
+```
+
+### App environment
+
+Keep the Go app private on localhost and let Caddy terminate HTTPS:
+
+```bash
+sudo sed -i 's/^APP_ADDR=.*/APP_ADDR=127.0.0.1:8067/' /opt/mun-app/.env
+sudo sed -i 's/^COOKIE_SECURE=.*/COOKIE_SECURE=true/' /opt/mun-app/.env
+sudo systemctl restart mun-app
+```
+
+### Caddy with automatic HTTPS
+
+Install Caddy if needed:
+
+```bash
+sudo apt update
+sudo apt install -y caddy
+```
+
+Create `/etc/caddy/Caddyfile`:
+
+```bash
+sudo tee /etc/caddy/Caddyfile >/dev/null <<'EOF'
+{
+	admin off
+}
+
+summit.example.com {
+	reverse_proxy 127.0.0.1:8067
+	encode zstd gzip
+}
+EOF
+```
+
+Replace `summit.example.com` with the real domain. Then validate and restart:
+
+```bash
+sudo caddy validate --config /etc/caddy/Caddyfile
+sudo systemctl enable --now caddy
+sudo systemctl restart caddy
+```
+
+### iptables for HTTPS
+
+Allow HTTP and HTTPS for Caddy. Port `80` is required for Let's Encrypt HTTP validation and redirect; port `443` serves the site.
+
+```bash
+sudo iptables -I INPUT -p tcp --dport 80 -j ACCEPT
+sudo iptables -I INPUT -p tcp --dport 443 -j ACCEPT
+sudo iptables -P INPUT DROP
+sudo netfilter-persistent save
+```
+
+Open `https://summit.example.com/admin`.
+
+Troubleshooting:
+
+```bash
+sudo journalctl -u caddy -f
+sudo journalctl -u mun-app -f
+curl -f http://127.0.0.1:8067/healthz
+```
+
+## 7. Push code changes to the app on port `8067`
+
+The Go app listens on `127.0.0.1:8067`. Pushing code changes means pulling the new code on the server, rebuilding, installing files into `/opt/mun-app`, and restarting `mun-app`.
 
 ```bash
 cd /home/ubuntu/instantni-summit
@@ -129,12 +222,29 @@ bun install
 bun run build
 go build -o bin/mun-app ./cmd/server
 sudo ./scripts/deploy.sh
+```
+
+If `scripts/deploy.sh` is missing on the server, use the manual install commands:
+
+```bash
+sudo install -m 0755 bin/mun-app /opt/mun-app/mun-app
+sudo rsync -a --delete web/ /opt/mun-app/web/
+sudo rsync -a --delete migrations/ /opt/mun-app/migrations/
+sudo rsync -a --delete scripts/ /opt/mun-app/scripts/
+sudo chown -R munapp:munapp /opt/mun-app
 sudo systemctl restart mun-app
+```
+
+Verify that the updated app is running on `8067`:
+
+```bash
+curl -f http://127.0.0.1:8067/healthz
+sudo systemctl status mun-app --no-pager
 ```
 
 If new migrations were added, they run automatically at app startup.
 
-## 7. Backup and restore
+## 8. Backup and restore
 
 Backup:
 
