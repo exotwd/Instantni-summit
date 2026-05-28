@@ -96,6 +96,10 @@ function renderLogin(message = "") {
 
 function render() {
   if (!state) return;
+  const previousCenter = app.querySelector(".panel.center");
+  const previousResolutionRevision = previousCenter?.dataset.resolutionRevision || "";
+  const previousScrollTop = previousCenter ? previousCenter.scrollTop : 0;
+  const currentResolutionRevision = String(state.resolution?.revision || "");
   app.innerHTML = `
     <div class="screen">
       <div class="panel left">
@@ -104,7 +108,7 @@ function render() {
         <div class="section-title">Rozložení států</div>
         <div id="miniStage" class="mini-stage">${renderSeatMap("attendance", false)}</div>
       </div>
-      <div class="panel center">
+      <div class="panel center" data-resolution-revision="${esc(currentResolutionRevision)}">
         <div class="resolution-title">${esc(state.settings.values.committee_name || "Aktuální znění rezoluce")}</div>
         <div id="resolution" class="resolution">${state.resolution.html || renderResolutionPoints()}</div>
       </div>
@@ -126,6 +130,10 @@ function render() {
   if (adminButton) adminButton.onclick = () => window.open("/admin", "_blank");
   const hideResultButton = app.querySelector("[data-hide-result]");
   if (hideResultButton) hideResultButton.onclick = hideCurrentResult;
+  const currentCenter = app.querySelector(".panel.center");
+  if (currentCenter && previousResolutionRevision === currentResolutionRevision) {
+    currentCenter.scrollTop = previousScrollTop;
+  }
 }
 
 function renderCurrentSpeaker() {
