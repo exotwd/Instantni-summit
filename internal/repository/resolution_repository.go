@@ -18,11 +18,16 @@ func NewResolutionRepository(db database.Executor) *ResolutionRepository {
 }
 
 func (r *ResolutionRepository) List(ctx context.Context, includeRemoved bool) ([]domain.ResolutionPoint, error) {
-	query := `select id, number, text, status, source_amendment_id, created_at, updated_at, removed_at from resolution_points`
+	query := `select rp.id, rp.number, rp.text, rp.status, rp.source_amendment_id,
+		coalesce(a.number, 0), coalesce(nullif(a.submitter_name, ''), d.name, ''), coalesce(a.guarantors_text, ''),
+		rp.created_at, rp.updated_at, rp.removed_at
+		from resolution_points rp
+		left join amendments a on a.id = rp.source_amendment_id
+		left join delegations d on d.id = a.submitter_delegation_id`
 	if !includeRemoved {
-		query += ` where status = 'active'`
+		query += ` where rp.status = 'active'`
 	}
-	query += ` order by number, id`
+	query += ` order by rp.number, rp.id`
 	rows, err := r.db.QueryContext(ctx, query)
 	if err != nil {
 		return nil, err
@@ -40,7 +45,13 @@ func (r *ResolutionRepository) List(ctx context.Context, includeRemoved bool) ([
 }
 
 func (r *ResolutionRepository) Get(ctx context.Context, id int64) (*domain.ResolutionPoint, error) {
-	row := r.db.QueryRowContext(ctx, `select id, number, text, status, source_amendment_id, created_at, updated_at, removed_at from resolution_points where id = ?`, id)
+	row := r.db.QueryRowContext(ctx, `select rp.id, rp.number, rp.text, rp.status, rp.source_amendment_id,
+		coalesce(a.number, 0), coalesce(nullif(a.submitter_name, ''), d.name, ''), coalesce(a.guarantors_text, ''),
+		rp.created_at, rp.updated_at, rp.removed_at
+		from resolution_points rp
+		left join amendments a on a.id = rp.source_amendment_id
+		left join delegations d on d.id = a.submitter_delegation_id
+		where rp.id = ?`, id)
 	point, err := scanResolutionPoint(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
@@ -108,8 +119,8 @@ func (r *ResolutionRepository) ResetDefaultTemplate(ctx context.Context) error {
 	return err
 }
 
-func (r *ResolutionRepository) UpdatePoint(ctx context.Context, id int64, text string) error {
-	_, err := r.db.ExecContext(ctx, `update resolution_points set text=?, status='active', updated_at=current_timestamp where id=?`, text, id)
+func (r *ResolutionRepository) UpdatePoint(ctx context.Context, id int64, text string, sourceAmendmentID *int64) error {
+	_, err := r.db.ExecContext(ctx, `update resolution_points set text=?, status='active', source_amendment_id=?, updated_at=current_timestamp where id=?`, text, sourceAmendmentID, id)
 	return err
 }
 
@@ -146,10 +157,17 @@ func (r *ResolutionRepository) Renumber(ctx context.Context) error {
 func scanResolutionPoint(row interface{ Scan(dest ...any) error }) (domain.ResolutionPoint, error) {
 	var point domain.ResolutionPoint
 	var source sql.NullInt64
+	var sourcePN sql.NullInt64
+	var submitterName, guarantorsText sql.NullString
 	var removed sql.NullTime
-	err := row.Scan(&point.ID, &point.Number, &point.Text, &point.Status, &source, &point.CreatedAt, &point.UpdatedAt, &removed)
+	err := row.Scan(&point.ID, &point.Number, &point.Text, &point.Status, &source, &sourcePN, &submitterName, &guarantorsText, &point.CreatedAt, &point.UpdatedAt, &removed)
 	point.SourceAmendmentID = nullInt64Ptr(source)
 	point.Template = point.SourceAmendmentID == nil
+	if sourcePN.Valid {
+		point.SourcePNNumber = int(sourcePN.Int64)
+	}
+	point.SubmitterName = nullString(submitterName)
+	point.GuarantorsText = nullString(guarantorsText)
 	point.RemovedAt = nullTimePtr(removed)
 	return point, err
 }

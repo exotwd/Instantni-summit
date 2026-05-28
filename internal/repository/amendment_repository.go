@@ -19,8 +19,11 @@ func NewAmendmentRepository(db database.Executor) *AmendmentRepository {
 }
 
 func (r *AmendmentRepository) List(ctx context.Context) ([]domain.Amendment, error) {
-	rows, err := r.db.QueryContext(ctx, `select id, number, type, target_point_id, submitter_delegation_id, submitter_name, guarantors_text, text, status, introduced_at, created_at, updated_at
-		from amendments order by number desc, id desc`)
+	rows, err := r.db.QueryContext(ctx, `select a.id, a.number, a.type, a.target_point_id, a.submitter_delegation_id,
+		coalesce(nullif(a.submitter_name, ''), d.name, ''), a.guarantors_text, a.text, a.status, a.introduced_at, a.created_at, a.updated_at
+		from amendments a
+		left join delegations d on d.id = a.submitter_delegation_id
+		order by a.number desc, a.id desc`)
 	if err != nil {
 		return nil, err
 	}
@@ -37,8 +40,11 @@ func (r *AmendmentRepository) List(ctx context.Context) ([]domain.Amendment, err
 }
 
 func (r *AmendmentRepository) Get(ctx context.Context, id int64) (*domain.Amendment, error) {
-	row := r.db.QueryRowContext(ctx, `select id, number, type, target_point_id, submitter_delegation_id, submitter_name, guarantors_text, text, status, introduced_at, created_at, updated_at
-		from amendments where id = ?`, id)
+	row := r.db.QueryRowContext(ctx, `select a.id, a.number, a.type, a.target_point_id, a.submitter_delegation_id,
+		coalesce(nullif(a.submitter_name, ''), d.name, ''), a.guarantors_text, a.text, a.status, a.introduced_at, a.created_at, a.updated_at
+		from amendments a
+		left join delegations d on d.id = a.submitter_delegation_id
+		where a.id = ?`, id)
 	item, err := scanAmendment(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil

@@ -22,6 +22,9 @@ type ResolutionPoint struct {
 	Status            string     `json:"status"`
 	SourceAmendmentID *int64     `json:"sourceAmendmentId,omitempty"`
 	Template          bool       `json:"template"`
+	SourcePNNumber    int        `json:"sourcePnNumber,omitempty"`
+	SubmitterName     string     `json:"submitterName,omitempty"`
+	GuarantorsText    string     `json:"guarantorsText,omitempty"`
 	CreatedAt         time.Time  `json:"createdAt"`
 	UpdatedAt         time.Time  `json:"updatedAt"`
 	RemovedAt         *time.Time `json:"removedAt,omitempty"`

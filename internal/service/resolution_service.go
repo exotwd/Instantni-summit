@@ -49,6 +49,10 @@ func RenderResolutionHTML(points []domain.ResolutionPoint, amendments []domain.A
 	for _, point := range points {
 		b.WriteString("<li>")
 		b.WriteString(html.EscapeString(point.Text))
+		if suffix := resolutionPointSuffix(point); suffix != "" {
+			b.WriteString(" ")
+			b.WriteString(html.EscapeString(suffix))
+		}
 		b.WriteString("</li>")
 	}
 	for _, amendment := range amendments {
@@ -63,6 +67,10 @@ func RenderResolutionHTML(points []domain.ResolutionPoint, amendments []domain.A
 		b.WriteString(className)
 		b.WriteString(`">`)
 		b.WriteString(html.EscapeString(amendmentWorkingText(amendment)))
+		if suffix := amendmentSuffix(amendment); suffix != "" {
+			b.WriteString(" ")
+			b.WriteString(html.EscapeString(suffix))
+		}
 		b.WriteString("</li>")
 	}
 	b.WriteString("</ol>")
@@ -81,8 +89,36 @@ func amendmentWorkingText(amendment domain.Amendment) string {
 		if text == "" {
 			return "PN " + strconv.Itoa(amendment.Number)
 		}
-		return text + " (PN " + strconv.Itoa(amendment.Number) + ")"
+		return text
 	}
+}
+
+func resolutionPointSuffix(point domain.ResolutionPoint) string {
+	if point.SourcePNNumber == 0 {
+		return ""
+	}
+	parts := []string{"PN" + strconv.Itoa(point.SourcePNNumber)}
+	if strings.TrimSpace(point.SubmitterName) != "" {
+		parts = append(parts, strings.TrimSpace(point.SubmitterName))
+	}
+	if strings.TrimSpace(point.GuarantorsText) != "" {
+		parts = append(parts, strings.TrimSpace(point.GuarantorsText))
+	}
+	return "(" + strings.Join(parts, ", ") + ")"
+}
+
+func amendmentSuffix(amendment domain.Amendment) string {
+	if amendment.Number == 0 {
+		return ""
+	}
+	parts := []string{"PN" + strconv.Itoa(amendment.Number)}
+	if strings.TrimSpace(amendment.SubmitterName) != "" {
+		parts = append(parts, strings.TrimSpace(amendment.SubmitterName))
+	}
+	if strings.TrimSpace(amendment.GuarantorsText) != "" {
+		parts = append(parts, strings.TrimSpace(amendment.GuarantorsText))
+	}
+	return "(" + strings.Join(parts, ", ") + ")"
 }
 
 func (s *ResolutionService) AddPoint(ctx context.Context, text string) error {
@@ -122,7 +158,7 @@ func (s *ResolutionService) ApplyPassedAmendment(ctx context.Context, tx *sql.Tx
 		if err := validateMutableResolutionTarget(ctx, resolutions, *amendment.TargetPointID); err != nil {
 			return err
 		}
-		return resolutions.UpdatePoint(ctx, *amendment.TargetPointID, amendment.Text)
+		return resolutions.UpdatePoint(ctx, *amendment.TargetPointID, amendment.Text, &amendment.ID)
 	case domain.AmendmentRemove:
 		if amendment.TargetPointID == nil {
 			return NewUserError("missing_target", "Pro odstranění bodu chybí cílový bod.")

@@ -373,8 +373,17 @@ function renderResolutionPoints() {
     <div class="resolution-meta"><strong>OTÁZKA SE TÝKÁ:</strong> Rozšiřování EU</div>
     <div class="resolution-meta"><strong>PŘEDKLADATEL:</strong> Předsednictvo Evropské rady</div>
     <p class="resolution-lead">Evropská rada zaujímá společný postoj, který</p>
-    <ol>${state.resolution.points.map((point) => `<li>${esc(point.text)}</li>`).join("")}</ol>
+    <ol>${state.resolution.points.map((point) => `<li>${esc(point.text)}${resolutionPointSuffix(point)}</li>`).join("")}</ol>
   </section>`;
+}
+
+function resolutionPointSuffix(point) {
+  const pn = Number(point.sourcePnNumber || 0);
+  if (!pn) return "";
+  const parts = [`PN${pn}`];
+  if (point.submitterName) parts.push(point.submitterName);
+  if (point.guarantorsText) parts.push(point.guarantorsText);
+  return ` (${esc(parts.join(", "))})`;
 }
 
 function defaultSeat(index) {
