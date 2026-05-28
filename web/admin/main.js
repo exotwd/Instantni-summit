@@ -9,6 +9,7 @@ let closeEvents = null;
 let speakerClickTimer = null;
 let editingDelegationId = null;
 let editingAgendaId = null;
+let editingAmendmentId = null;
 let draggingLayout = null;
 let draggingChair = null;
 let manualVoteCursor = 0;
@@ -338,6 +339,7 @@ function renderAmendmentItems() {
     return `<div class="empty">V aktivním seznamu teď nejsou žádné PN. Odhlasované PN zůstávají uložené v databázi.</div>`;
   }
   return active.map((item) => {
+    if (Number(editingAmendmentId || 0) === Number(item.id)) return renderAmendmentEditForm(item);
     const ready = item.status === "introduced";
     const canStartProcess = canStartVotingProcessFor(item);
     const processLabel = canStartVotingFor(item) ? "Spustit hlasování" : "Zahájit hlasování";
@@ -353,6 +355,7 @@ function renderAmendmentItems() {
         <span class="label">Text návrhu</span>
         <div class="original">${esc(item.text)}</div>
         <div class="actions">
+          <button class="save" data-edit-amendment="${item.id}">Upravit PN</button>
           ${item.status === "submitted" ? `<button class="approve" data-accept="${item.id}">Zapracovat do dokumentu</button>` : ""}
           ${item.status === "accepted" || item.status === "introduced" ? `<button class="present" data-introduce="${item.id}">Označit jako představený</button>` : ""}
           <button class="reject" data-reject="${item.id}">Vyřadit</button>
@@ -360,6 +363,26 @@ function renderAmendmentItems() {
         </div>
       </div>`;
   }).join("");
+}
+
+function renderAmendmentEditForm(item) {
+  return `
+    <form class="card ${amendmentClass(item)}" id="card-${item.id}" data-form="edit-amendment" data-amendment-id="${item.id}">
+      <div class="meta compact">
+        <div><strong>Stav</strong><br><span class="badge">${statusLabel(item.status)}</span></div>
+        <div><strong>PN</strong><br>${item.number || ""}</div>
+        <div><strong>Typ návrhu</strong><select name="type">${amendmentTypeOptions(item.type)}</select></div>
+        <div><strong>Cílový bod</strong><select name="targetPointId"><option value="">Bez cíle</option>${resolutionOptionsWithSelected(item.targetPointId)}</select></div>
+        <div><strong>Navrhovatel</strong><input name="submitterName" value="${esc(item.submitterName || "")}"></div>
+        <div><strong>Garanti</strong><input name="guarantorsText" value="${esc(item.guarantorsText || "")}"></div>
+      </div>
+      <span class="label">Text návrhu</span>
+      <textarea name="text" required>${esc(item.text || "")}</textarea>
+      <div class="actions">
+        <button class="approve" type="submit">Uložit úpravy</button>
+        <button class="save" type="button" data-cancel-amendment-edit>Zrušit</button>
+      </div>
+    </form>`;
 }
 
 function renderLayoutPanel() {
@@ -1087,6 +1110,9 @@ function bindActions() {
 
   const amendmentForm = app.querySelector("[data-form=amendment]");
   if (amendmentForm) amendmentForm.onsubmit = submitAmendment;
+  app.querySelectorAll("[data-edit-amendment]").forEach((button) => button.onclick = () => { editingAmendmentId = Number(button.dataset.editAmendment); render(); });
+  app.querySelectorAll("[data-cancel-amendment-edit]").forEach((button) => button.onclick = () => { editingAmendmentId = null; render(); });
+  app.querySelectorAll("[data-form=edit-amendment]").forEach((form) => form.onsubmit = submitAmendmentEdit);
   const agendaForm = app.querySelector("[data-form=agenda]");
   if (agendaForm) agendaForm.onsubmit = submitAgenda;
   const cancelAgendaEdit = app.querySelector("[data-cancel-agenda-edit]");
@@ -1139,6 +1165,33 @@ async function submitAmendment(event) {
     guarantorsText: form.guarantorsText.value,
     text: form.text.value
   });
+}
+
+async function submitAmendmentEdit(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const id = Number(form.dataset.amendmentId);
+  const existing = state.amendments.find((item) => Number(item.id) === id) || {};
+  try {
+    await api(`/api/amendments/${id}`, {
+      method: "PUT",
+      body: {
+        ...existing,
+        id,
+        type: form.type.value,
+        targetPointId: form.targetPointId.value ? Number(form.targetPointId.value) : null,
+        submitterName: form.submitterName.value,
+        guarantorsText: form.guarantorsText.value,
+        text: form.text.value,
+        status: existing.status || "submitted"
+      }
+    });
+    editingAmendmentId = null;
+    await load(false);
+    showToast("PN upraven.");
+  } catch (err) {
+    showToast(err.message);
+  }
 }
 
 async function startVotingProcess(id) {
