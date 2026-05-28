@@ -6,11 +6,14 @@ let state = null;
 let connected = false;
 let closeEvents = null;
 const hiddenResultKey = "munHiddenScreenResultSessionId";
+let resolutionScrollDirection = 1;
+let lastAutoScrollAt = 0;
 
 init();
 window.setInterval(() => {
   if (state) render();
 }, 1000);
+window.setInterval(autoScrollResolution, 50);
 
 async function init() {
   try {
@@ -134,6 +137,7 @@ function render() {
   if (currentCenter && previousResolutionRevision === currentResolutionRevision) {
     currentCenter.scrollTop = previousScrollTop;
   }
+  lastAutoScrollAt = performance.now();
 }
 
 function renderCurrentSpeaker() {
@@ -298,6 +302,27 @@ function hideCurrentResult() {
 
 function isCurrentResultHidden(session) {
   return String(localStorage.getItem(hiddenResultKey) || "") === String(session?.id || "");
+}
+
+function autoScrollResolution() {
+  if (!state || state.settings.values.screen_resolution_autoscroll === "false") return;
+  const center = app.querySelector(".panel.center");
+  if (!center) return;
+  const maxScroll = center.scrollHeight - center.clientHeight;
+  if (maxScroll <= 4) return;
+  const now = performance.now();
+  if (!lastAutoScrollAt) lastAutoScrollAt = now;
+  const elapsedSeconds = Math.min(0.2, (now - lastAutoScrollAt) / 1000);
+  lastAutoScrollAt = now;
+  const speed = clamp(Number(state.settings.values.screen_resolution_scroll_speed || 10), 1, 80);
+  center.scrollTop += resolutionScrollDirection * speed * elapsedSeconds;
+  if (center.scrollTop >= maxScroll - 1) {
+    center.scrollTop = maxScroll;
+    resolutionScrollDirection = -1;
+  } else if (center.scrollTop <= 1) {
+    center.scrollTop = 0;
+    resolutionScrollDirection = 1;
+  }
 }
 
 function voteStatusLabel(session) {

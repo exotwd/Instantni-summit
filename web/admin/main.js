@@ -138,6 +138,8 @@ function render() {
         <button class="save" data-action="logout">Odhlásit</button>
         ${renderTopBreakControls()}
         <span id="status">${statusText()}</span>
+        <label class="toggle-line"><input name="screen_resolution_autoscroll" type="checkbox" ${autoScroll ? "checked" : ""}><span>Automaticky pomalu posouvat rezoluci na projekci</span></label>
+        <div><strong>Rychlost posunu rezoluce</strong><input name="screen_resolution_scroll_speed" type="number" min="1" max="80" step="1" value="${esc(values.screen_resolution_scroll_speed || "10")}"></div>
       </div>
       ${state.settings.defaultsWarning ? `<div class="warning">Výchozí PINy jsou stále aktivní. Změň je v nastavení.</div>` : ""}
       ${renderPanel()}
@@ -561,6 +563,7 @@ function renderAgendaInlineTable() {
 function renderSettingsPanel() {
   const values = state.settings.values || {};
   const votingMode = values.voting_mode || "public";
+  const autoScroll = values.screen_resolution_autoscroll !== "false";
   return `
     <form class="card" data-form="settings">
       <h2>Nastavení administrátora</h2>
@@ -569,6 +572,10 @@ function renderSettingsPanel() {
         <div><strong>Výbor</strong><input name="committee_name" value="${esc(values.committee_name || "")}"></div>
         <div><strong>Čas hlasování v sekundách</strong><input name="default_voting_time_sec" type="number" min="1" value="${esc(values.default_voting_time_sec || "60")}"></div>
         <div><strong>Režim hlasování</strong><select name="voting_mode">${option("public", "Veřejné se schématem", votingMode)}${option("secret", "Jednoduché / tajné bez schématu", votingMode)}</select></div>
+      </div>
+      <div class="settings-extra-controls">
+        <label class="toggle-line"><input name="screen_resolution_autoscroll" type="checkbox" ${autoScroll ? "checked" : ""}><span>Automaticky pomalu posouvat rezoluci na projekci</span></label>
+        <div><strong>Rychlost posunu rezoluce</strong><input name="screen_resolution_scroll_speed" type="number" min="1" max="80" step="1" value="${esc(values.screen_resolution_scroll_speed || "10")}"></div>
       </div>
       <div class="actions"><button class="approve">Uložit nastavení</button></div>
     </form>
@@ -1241,7 +1248,9 @@ async function submitSettings(event) {
     conference_name: form.conference_name.value,
     committee_name: form.committee_name.value,
     default_voting_time_sec: String(form.default_voting_time_sec.value || "60"),
-    voting_mode: form.voting_mode.value
+    voting_mode: form.voting_mode.value,
+    screen_resolution_autoscroll: form.screen_resolution_autoscroll.checked ? "true" : "false",
+    screen_resolution_scroll_speed: String(form.screen_resolution_scroll_speed.value || "10")
   });
 }
 
