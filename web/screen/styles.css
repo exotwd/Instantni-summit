@@ -937,20 +937,29 @@ html.flag-emoji-polyfill body {
   font-size: 30px;
 }
 
-.admin-button {
+.admin-button,
+.clear-button {
   position: fixed;
   right: 18px;
-  bottom: 18px;
   z-index: 350;
   padding: 10px 14px;
   border: 1px solid rgba(255, 255, 255, .16);
   border-radius: 999px;
-  background: rgba(59, 130, 246, .88);
   color: #fff;
   cursor: pointer;
   font-size: 13px;
   font-weight: 850;
   backdrop-filter: blur(10px);
+}
+
+.admin-button {
+  bottom: 18px;
+  background: rgba(59, 130, 246, .88);
+}
+
+.clear-button {
+  bottom: 62px;
+  background: rgba(15, 23, 42, .78);
 }
 
 .login {

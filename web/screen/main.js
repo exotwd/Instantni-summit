@@ -120,9 +120,12 @@ function render() {
     ${renderDebateOverlay()}
     ${renderVotingOverlay()}
     ${renderBreakOverlay()}
+    ${renderHideResultButton()}
     <button class="admin-button" data-open-admin>Řízení schůze</button>`;
   const adminButton = app.querySelector("[data-open-admin]");
   if (adminButton) adminButton.onclick = () => window.open("/admin", "_blank");
+  const hideResultButton = app.querySelector("[data-hide-result]");
+  if (hideResultButton) hideResultButton.onclick = hideCurrentResult;
 }
 
 function renderCurrentSpeaker() {
@@ -243,6 +246,7 @@ function renderVotingOverlay() {
   const amendment = voting.amendment;
   const counts = voting.counts || {};
   const isResult = session.status === "saved" || session.status === "closed";
+  if (isResult && isCurrentResultHidden(session)) return "";
   const secretMode = (state.settings.values.voting_mode || "public") === "secret";
   return `
     <div id="voteOverlay" class="overlay voting-overlay ${isResult ? "result-state" : "active-state"} visible">
@@ -267,6 +271,25 @@ function renderVotingOverlay() {
           </div>`
         : `<div class="overlay-stage vote-stage">${renderSeatMap("vote", true)}</div>`}
     </div>`;
+}
+
+function renderHideResultButton() {
+  const session = state?.voting?.session;
+  if (!session || state.debate?.session) return "";
+  const isResult = session.status === "saved" || session.status === "closed";
+  if (!isResult || isCurrentResultHidden(session)) return "";
+  return `<button class="clear-button" data-hide-result>Skrýt výsledek</button>`;
+}
+
+function hideCurrentResult() {
+  const id = state?.voting?.session?.id;
+  if (!id) return;
+  localStorage.setItem(hiddenResultKey, String(id));
+  render();
+}
+
+function isCurrentResultHidden(session) {
+  return String(localStorage.getItem(hiddenResultKey) || "") === String(session?.id || "");
 }
 
 function voteStatusLabel(session) {
