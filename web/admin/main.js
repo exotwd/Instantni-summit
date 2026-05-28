@@ -125,6 +125,9 @@ function renderLogin(message = "") {
 
 function render() {
   if (!state) return;
+  const values = state.settings?.values || {};
+  const autoScroll = values.screen_resolution_autoscroll !== "false";
+
   app.innerHTML = `
     <div class="top">
       <h1>MUN řízení schůze</h1>
