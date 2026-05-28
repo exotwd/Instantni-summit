@@ -111,7 +111,7 @@ function render() {
         <div class="section-title">Rozložení států</div>
         <div id="miniStage" class="mini-stage">${renderSeatMap("attendance", false)}</div>
       </div>
-      <div class="panel center" data-resolution-revision="${esc(currentResolutionRevision)}">
+      <div class="panel center" data-resolution-revision="${esc(currentResolutionRevision)}" style="${resolutionStyleVars()}">
         <div class="resolution-title">${esc(state.settings.values.committee_name || "Aktuální znění rezoluce")}</div>
         <div id="resolution" class="resolution">${state.resolution.html || renderResolutionPoints()}</div>
       </div>
@@ -323,6 +323,14 @@ function autoScrollResolution() {
     center.scrollTop = 0;
     resolutionScrollDirection = 1;
   }
+}
+
+function resolutionStyleVars() {
+  const values = state?.settings?.values || {};
+  const fontSize = clamp(Number(values.screen_resolution_font_size || 20), 14, 36);
+  const lineHeight = clamp(Number(values.screen_resolution_line_height || 1.38), 1.15, 1.8);
+  const fontWeight = clamp(Number(values.screen_resolution_font_weight || 430), 300, 800);
+  return `--resolution-font-size:${fontSize}px;--resolution-line-height:${lineHeight};--resolution-font-weight:${fontWeight};`;
 }
 
 function voteStatusLabel(session) {

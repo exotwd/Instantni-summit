@@ -138,8 +138,6 @@ function render() {
         <button class="save" data-action="logout">Odhlásit</button>
         ${renderTopBreakControls()}
         <span id="status">${statusText()}</span>
-        <label class="toggle-line"><input name="screen_resolution_autoscroll" type="checkbox" ${autoScroll ? "checked" : ""}><span>Automaticky pomalu posouvat rezoluci na projekci</span></label>
-        <div><strong>Rychlost posunu rezoluce</strong><input name="screen_resolution_scroll_speed" type="number" min="1" max="80" step="1" value="${esc(values.screen_resolution_scroll_speed || "10")}"></div>
       </div>
       ${state.settings.defaultsWarning ? `<div class="warning">Výchozí PINy jsou stále aktivní. Změň je v nastavení.</div>` : ""}
       ${renderPanel()}
@@ -576,6 +574,9 @@ function renderSettingsPanel() {
       <div class="settings-extra-controls">
         <label class="toggle-line"><input name="screen_resolution_autoscroll" type="checkbox" ${autoScroll ? "checked" : ""}><span>Automaticky pomalu posouvat rezoluci na projekci</span></label>
         <div><strong>Rychlost posunu rezoluce</strong><input name="screen_resolution_scroll_speed" type="number" min="1" max="80" step="1" value="${esc(values.screen_resolution_scroll_speed || "10")}"></div>
+        <div><strong>Velikost pisma rezoluce</strong><input name="screen_resolution_font_size" type="number" min="14" max="36" step="1" value="${esc(values.screen_resolution_font_size || "20")}"></div>
+        <div><strong>Radkovani rezoluce</strong><input name="screen_resolution_line_height" type="number" min="1.15" max="1.8" step="0.05" value="${esc(values.screen_resolution_line_height || "1.38")}"></div>
+        <div><strong>Tloustka pisma rezoluce</strong><input name="screen_resolution_font_weight" type="number" min="300" max="800" step="50" value="${esc(values.screen_resolution_font_weight || "430")}"></div>
       </div>
       <div class="actions"><button class="approve">Uložit nastavení</button></div>
     </form>
@@ -639,6 +640,18 @@ function renderDataDeletePanel() {
         </div>
       </div>
       <div class="data-delete-grid">
+        <button class="data-delete-card" data-export-resolution-docx>
+          <strong>Export rezoluce do Wordu</strong>
+          <span>Stahne aktualni zneni rezoluce bez zavorek s PN metadaty.</span>
+        </button>
+        <button class="data-delete-card" data-export-resolution-pdf>
+          <strong>Export rezoluce do PDF</strong>
+          <span>Stahne cistou rezoluci bez zavorek s PN metadaty.</span>
+        </button>
+        <button class="data-delete-card" data-export-all-data>
+          <strong>Export vsech dat</strong>
+          <span>Stahne kompletni stav aplikace jako JSON zalohu.</span>
+        </button>
         ${scopes.map(([scope, title, description]) => `
           <button class="data-delete-card" data-delete-data-scope="${scope}">
             <strong>${esc(title)}</strong>
@@ -1099,6 +1112,12 @@ function bindActions() {
   if (exportButton) exportButton.onclick = exportAttendanceXlsx;
   const exportQRButton = app.querySelector("[data-export-qr]");
   if (exportQRButton) exportQRButton.onclick = exportQRCodesPdf;
+  const exportResolutionDocxButton = app.querySelector("[data-export-resolution-docx]");
+  if (exportResolutionDocxButton) exportResolutionDocxButton.onclick = () => downloadExport("/api/export/resolution.docx", "rezoluce.docx");
+  const exportResolutionPdfButton = app.querySelector("[data-export-resolution-pdf]");
+  if (exportResolutionPdfButton) exportResolutionPdfButton.onclick = () => downloadExport("/api/export/resolution.pdf", "rezoluce.pdf");
+  const exportAllDataButton = app.querySelector("[data-export-all-data]");
+  if (exportAllDataButton) exportAllDataButton.onclick = () => downloadExport("/api/export/all-data", "mun-data.json");
   const generateLinksButton = app.querySelector("[data-generate-links]");
   if (generateLinksButton) generateLinksButton.onclick = generateVoteLinks;
   app.querySelectorAll("[data-mark-all]").forEach((button) => button.onclick = () => markAllPresence(button.dataset.markAll === "present"));
@@ -1250,7 +1269,10 @@ async function submitSettings(event) {
     default_voting_time_sec: String(form.default_voting_time_sec.value || "60"),
     voting_mode: form.voting_mode.value,
     screen_resolution_autoscroll: form.screen_resolution_autoscroll.checked ? "true" : "false",
-    screen_resolution_scroll_speed: String(form.screen_resolution_scroll_speed.value || "10")
+    screen_resolution_scroll_speed: String(form.screen_resolution_scroll_speed.value || "10"),
+    screen_resolution_font_size: String(form.screen_resolution_font_size.value || "20"),
+    screen_resolution_line_height: String(form.screen_resolution_line_height.value || "1.38"),
+    screen_resolution_font_weight: String(form.screen_resolution_font_weight.value || "430")
   });
 }
 
@@ -1700,6 +1722,29 @@ async function exportQRCodesPdf() {
     URL.revokeObjectURL(url);
     await load(false);
     showToast("QR PDF připraveno.");
+  } catch (err) {
+    showToast(err.message);
+  }
+}
+
+async function downloadExport(path, filename) {
+  try {
+    const res = await fetch(path);
+    const type = res.headers.get("Content-Type") || "";
+    if (!res.ok) {
+      const data = type.includes("application/json") ? await res.json().catch(() => null) : null;
+      throw new Error(data?.error?.message || `Export selhal (${res.status}).`);
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    showToast("Export pripraven.");
   } catch (err) {
     showToast(err.message);
   }
