@@ -8,12 +8,20 @@ const (
 	ResolutionDraft   = "draft"
 )
 
+var DefaultResolutionTemplatePoints = []string{
+	"odvolávajíc se na zakládající smlouvy EU,",
+	"přihlížejíc k Úmluvě o ochraně lidských práv a základních svobod,",
+	"podporuje…",
+	"bude se situací dále aktivně zabývat.",
+}
+
 type ResolutionPoint struct {
 	ID                int64      `json:"id"`
 	Number            int        `json:"number"`
 	Text              string     `json:"text"`
 	Status            string     `json:"status"`
 	SourceAmendmentID *int64     `json:"sourceAmendmentId,omitempty"`
+	Template          bool       `json:"template"`
 	CreatedAt         time.Time  `json:"createdAt"`
 	UpdatedAt         time.Time  `json:"updatedAt"`
 	RemovedAt         *time.Time `json:"removedAt,omitempty"`

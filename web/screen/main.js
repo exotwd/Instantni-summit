@@ -368,7 +368,13 @@ function projectionSeat(seat, large) {
 
 function renderResolutionPoints() {
   if (!state.resolution.points?.length) return "<p>Rezoluce zatím nemá body.</p>";
-  return `<ol>${state.resolution.points.map((point) => `<li>${esc(point.text)}</li>`).join("")}</ol>`;
+  return `<section class="resolution-template">
+    <div class="resolution-kicker">Evropská rada</div>
+    <div class="resolution-meta"><strong>OTÁZKA SE TÝKÁ:</strong> Rozšiřování EU</div>
+    <div class="resolution-meta"><strong>PŘEDKLADATEL:</strong> Předsednictvo Evropské rady</div>
+    <p class="resolution-lead">Evropská rada zaujímá společný postoj, který</p>
+    <ol>${state.resolution.points.map((point) => `<li>${esc(point.text)}</li>`).join("")}</ol>
+  </section>`;
 }
 
 function defaultSeat(index) {

@@ -1818,11 +1818,15 @@ function defaultSeat(index) {
 }
 
 function resolutionOptions() {
-  return (state.resolution.points || []).map((point) => `<option value="${point.id}">${point.number}. ${esc(shorten(point.text, 90))}</option>`).join("");
+  return mutableResolutionPoints().map((point) => `<option value="${point.id}">${point.number}. ${esc(shorten(point.text, 90))}</option>`).join("");
 }
 
 function resolutionOptionsWithSelected(selected) {
-  return (state.resolution.points || []).map((point) => `<option value="${point.id}" ${Number(selected || 0) === Number(point.id) ? "selected" : ""}>${point.number}. ${esc(shorten(point.text, 90))}</option>`).join("");
+  return mutableResolutionPoints().map((point) => `<option value="${point.id}" ${Number(selected || 0) === Number(point.id) ? "selected" : ""}>${point.number}. ${esc(shorten(point.text, 90))}</option>`).join("");
+}
+
+function mutableResolutionPoints() {
+  return (state.resolution.points || []).filter((point) => !point.template && point.sourceAmendmentId);
 }
 
 function amendmentTypeOptions(selected) {

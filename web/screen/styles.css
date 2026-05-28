@@ -143,6 +143,34 @@ body {
   margin-bottom: 12px;
 }
 
+.resolution-template {
+  max-width: 980px;
+  margin: 0 auto;
+}
+
+.resolution-kicker {
+  margin-bottom: 18px;
+  font-size: 34px;
+  font-weight: 950;
+  letter-spacing: -0.02em;
+  text-align: center;
+}
+
+.resolution-meta {
+  margin: 8px 0;
+  font-size: 20px;
+  line-height: 1.35;
+}
+
+.resolution-meta strong {
+  margin-right: 8px;
+}
+
+.resolution-lead {
+  margin: 28px 0 12px;
+  font-weight: 800;
+}
+
 html.flag-emoji-polyfill,
 html.flag-emoji-polyfill body {
   font-family: "Twemoji Flags", Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Tahoma, Arial, sans-serif;

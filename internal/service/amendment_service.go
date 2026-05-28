@@ -204,6 +204,7 @@ func (s *AmendmentService) validate(ctx context.Context, amendment domain.Amendm
 	if amendment.Type == domain.AmendmentUpdate || amendment.Type == domain.AmendmentRemove {
 		if amendment.TargetPointID == nil { return NewUserError("missing_target", "Vyberte cílový bod rezoluce.") }
 		point, err := repository.NewResolutionRepository(s.db).Get(ctx, *amendment.TargetPointID)
+		if point != nil && point.Template { return NewUserError("default_resolution_locked", "Výchozí šablonu závěrů nelze měnit. PN může přidat nový bod nebo upravit jen bod vzniklý z PN.") }
 		if err != nil { return err }
 		if point == nil || point.Status != domain.ResolutionActive { return NewUserError("invalid_target", "Cílový bod neexistuje nebo není aktivní.") }
 	}

@@ -129,14 +129,20 @@ func TestUpdateAndRemoveAmendmentModifyResolution(t *testing.T) {
 	s, closeDB := newTestServices(t)
 	defer closeDB()
 	ctx := context.Background()
+	added, err := s.amendments.Create(ctx, domain.Amendment{Type: domain.AmendmentAdd, Text: "Nový měnitelný bod"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	passAmendment(t, s, added.ID)
 	resolution, _ := s.resolution.GetCurrentResolution(ctx)
-	target := resolution.Points[0].ID
+	target := resolution.Points[len(resolution.Points)-2].ID
 	update, err := s.amendments.Create(ctx, domain.Amendment{Type: domain.AmendmentUpdate, TargetPointID: &target, Text: "Aktualizovaný bod"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	passAmendment(t, s, update.ID)
 	resolution, _ = s.resolution.GetCurrentResolution(ctx)
+	resolution.Points = []domain.ResolutionPoint{resolution.Points[len(resolution.Points)-2]}
 	if resolution.Points[0].Text != "Aktualizovaný bod" {
 		t.Fatalf("point not updated: %s", resolution.Points[0].Text)
 	}

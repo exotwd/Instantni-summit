@@ -227,7 +227,7 @@ function renderVotingContent(voting) {
 }
 
 function renderAmendmentForm() {
-  const points = state.resolution.points || [];
+  const points = (state.resolution.points || []).filter((point) => !point.template && point.sourceAmendmentId);
   return `
     <form class="card amendment-card" data-form="amendment">
       <h2>Podat PN</h2>

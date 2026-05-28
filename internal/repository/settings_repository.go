@@ -101,6 +101,9 @@ func (r *SettingsRepository) ResetAll(ctx context.Context) error {
 			return err
 		}
 	}
+	if err := NewResolutionRepository(r.db).ResetDefaultTemplate(ctx); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -119,7 +122,8 @@ func (r *SettingsRepository) DeleteStoredData(ctx context.Context, scope string)
 			`delete from voting_sessions`,
 			`delete from debate_sessions`,
 			`delete from amendment_guarantors`,
-			`update resolution_points set source_amendment_id=null, updated_at=current_timestamp`,
+			`update amendments set target_point_id=null, updated_at=current_timestamp`,
+			`delete from resolution_points where source_amendment_id is not null`,
 			`delete from amendments`,
 		},
 		"resolution": {
@@ -165,6 +169,11 @@ func (r *SettingsRepository) DeleteStoredData(ctx context.Context, scope string)
 	}
 	for _, statement := range statements {
 		if _, err := r.db.ExecContext(ctx, statement); err != nil {
+			return err
+		}
+	}
+	if scope == "amendments" || scope == "resolution" || scope == "work-data" {
+		if err := NewResolutionRepository(r.db).ResetDefaultTemplate(ctx); err != nil {
 			return err
 		}
 	}
