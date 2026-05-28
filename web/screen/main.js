@@ -5,6 +5,7 @@ const app = document.querySelector("#app");
 let state = null;
 let connected = false;
 let closeEvents = null;
+const hiddenResultKey = "munHiddenScreenResultSessionId";
 
 init();
 window.setInterval(() => {
